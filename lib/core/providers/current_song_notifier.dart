@@ -320,6 +320,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   int _playRequestId = 0;
   bool _isServerStarted = false;
   bool _hasCountedForCurrentSong = false;
+  bool _needsEqReapply = false;
   List<SongModel>? _unshuffledPlaylist;
 
   ConcatenatingAudioSource? _playlistSource;
@@ -450,6 +451,13 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
           processingState == ProcessingState.buffering;
       ref.read(isPlayerLoadingProvider.notifier).state = isLoading;
 
+      if (processingState == ProcessingState.ready && _needsEqReapply) {
+        _needsEqReapply = false;
+        try {
+          ref.read(equalizerProvider.notifier).reapplySettings();
+        } catch (_) {}
+      }
+
       if (processingState == ProcessingState.completed) {
         isPlaying = false;
         _hasCountedForCurrentSong = false;
@@ -559,6 +567,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         initialIndex: index,
         initialPosition: Duration.zero,
       );
+      _needsEqReapply = true;
       if (requestId != _playRequestId) return;
 
       final repeatMode = ref.read(repeatModeProvider);
@@ -884,10 +893,16 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
         freqs.add(b.centerFrequency);
       }
       if (freqs.isNotEmpty) {
+        final currentGains = state.customGains;
+        final List<double> newGains = List.generate(
+          freqs.length,
+          (i) => i < currentGains.length ? currentGains[i] : 0.0,
+        );
         state = state.copyWith(
           frequencies: freqs,
-          customGains: List.filled(freqs.length, 0.0),
+          customGains: newGains,
         );
+        _applySettings();
       }
     } catch (_) {}
   }
@@ -897,6 +912,9 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
     final data = prefs.getString('custom_eq_presets');
     final virtStrength = prefs.getInt('virtualizer_strength') ?? 0;
     final bassStrength = prefs.getInt('bass_boost_strength') ?? 0;
+    final eqEnabled = prefs.getBool('eq_enabled') ?? false;
+    final eqPreset = prefs.getString('eq_preset') ?? 'Normal';
+    final customGainsStr = prefs.getString('eq_custom_gains');
 
     Map<String, List<double>> loaded = {};
     if (data != null) {
@@ -907,11 +925,25 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
         });
       } catch (_) {}
     }
+
+    List<double> loadedCustomGains = state.customGains;
+    if (customGainsStr != null) {
+      try {
+        loadedCustomGains = List<double>.from(
+          (jsonDecode(customGainsStr) as List).map((e) => (e as num).toDouble()),
+        );
+      } catch (_) {}
+    }
+
     state = state.copyWith(
+      enabled: eqEnabled,
+      preset: eqPreset,
+      customGains: loadedCustomGains,
       customPresets: loaded,
       virtualizerStrength: virtStrength,
       bassBoostStrength: bassStrength,
     );
+    _applySettings();
   }
 
   Future<void> saveCustomPreset(String name) async {
@@ -939,6 +971,9 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
 
   void toggle(bool val) {
     state = state.copyWith(enabled: val);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('eq_enabled', val);
+    });
     _applySettings();
   }
 
@@ -952,6 +987,9 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       );
       state = state.copyWith(customGains: newGains);
     }
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('eq_preset', preset);
+    });
     _applySettings();
   }
 
@@ -961,6 +999,14 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       newGains[bandIdx] = gain;
     }
     state = state.copyWith(preset: 'Custom', customGains: newGains);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('eq_custom_gains', jsonEncode(newGains));
+      prefs.setString('eq_preset', 'Custom');
+    });
+    _applySettings();
+  }
+
+  void reapplySettings() {
     _applySettings();
   }
 
@@ -1011,9 +1057,12 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       }
 
       final params = await eq.parameters;
+      final minDb = params.minDecibels;
+      final maxDb = params.maxDecibels;
       final bands = params.bands;
       for (int i = 0; i < gains.length && i < bands.length; i++) {
-        await bands[i].setGain(gains[i] * 100);
+        final clampedGain = gains[i].clamp(minDb, maxDb);
+        await bands[i].setGain(clampedGain);
       }
     } catch (e) {
       print("Error applying EQ settings: $e");
