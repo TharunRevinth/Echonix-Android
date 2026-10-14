@@ -18,6 +18,7 @@ part 'current_song_notifier.g.dart';
 final shuffleProvider = StateProvider<bool>((ref) => false);
 final repeatModeProvider = StateProvider<LoopMode>((ref) => LoopMode.off);
 final isPlayerLoadingProvider = StateProvider<bool>((ref) => false);
+final queueVersionProvider = StateProvider<int>((ref) => 0);
 
 class _StreamCacheEntry {
   final String url;
@@ -319,6 +320,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   int _playRequestId = 0;
   bool _isServerStarted = false;
   bool _hasCountedForCurrentSong = false;
+  List<SongModel>? _unshuffledPlaylist;
 
   ConcatenatingAudioSource? _playlistSource;
   LocalRedirectServer? _redirectServer;
@@ -530,6 +532,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       if (requestId != _playRequestId) return;
 
       playlist = songs;
+      _unshuffledPlaylist = null;
       currentSongIndex = index;
       final song = playlist[index];
       state = song;
@@ -632,19 +635,48 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     if (_playlistSource != null) {
       _playlistSource!.insert(insertIndex, _buildAudioSource(song));
     }
+    ref.read(queueVersionProvider.notifier).state++;
   }
 
-  void removeSongFromQueue(int index) {
+  void removeSongFromQueue(int index) async {
     if (index < 0 || index >= playlist.length) return;
     if (index == currentSongIndex && isPlaying) return;
 
+    final isRemovingCurrent = (index == currentSongIndex);
+
     playlist.removeAt(index);
-    if (_playlistSource != null) {
-      _playlistSource!.removeAt(index);
+    if (_unshuffledPlaylist != null) {
+      _unshuffledPlaylist!.removeWhere((s) => !playlist.any((p) => p.id == s.id));
     }
-    if (index < currentSongIndex) {
+
+    if (_playlistSource != null && index < _playlistSource!.length) {
+      await _playlistSource!.removeAt(index);
+    }
+
+    if (playlist.isEmpty) {
+      currentSongIndex = -1;
+      state = null;
+      isPlaying = false;
+      await audioPlayer?.stop();
+      ref.read(queueVersionProvider.notifier).state++;
+      return;
+    }
+
+    if (isRemovingCurrent) {
+      if (currentSongIndex < playlist.length) {
+        state = playlist[currentSongIndex];
+        _hasCountedForCurrentSong = false;
+        await audioPlayer?.seek(Duration.zero, index: currentSongIndex);
+      } else {
+        currentSongIndex = playlist.length - 1;
+        state = playlist[currentSongIndex];
+        _hasCountedForCurrentSong = false;
+        await audioPlayer?.seek(Duration.zero, index: currentSongIndex);
+      }
+    } else if (index < currentSongIndex) {
       currentSongIndex--;
     }
+    ref.read(queueVersionProvider.notifier).state++;
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -671,18 +703,66 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         currentSongIndex++;
       }
     }
+    ref.read(queueVersionProvider.notifier).state++;
   }
 
-  void toggleShuffle() {
+  void toggleShuffle() async {
     if (audioPlayer == null) return;
     final current = ref.read(shuffleProvider);
     final newVal = !current;
     ref.read(shuffleProvider.notifier).state = newVal;
-    audioPlayer!.setShuffleModeEnabled(newVal);
 
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool('shuffle_enabled', newVal);
-    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('shuffle_enabled', newVal);
+
+    if (newVal) {
+      _unshuffledPlaylist = List<SongModel>.from(playlist);
+
+      if (playlist.length > currentSongIndex + 1 && currentSongIndex >= 0) {
+        final prefix = playlist.sublist(0, currentSongIndex + 1);
+        final rest = List<SongModel>.from(playlist.sublist(currentSongIndex + 1));
+
+        final rand = Random();
+        for (int i = rest.length - 1; i > 0; i--) {
+          final j = rand.nextInt(i + 1);
+          final temp = rest[i];
+          rest[i] = rest[j];
+          rest[j] = temp;
+        }
+
+        playlist = [...prefix, ...rest];
+
+        if (_playlistSource != null) {
+          while (_playlistSource!.length > currentSongIndex + 1) {
+            await _playlistSource!.removeAt(_playlistSource!.length - 1);
+          }
+          await _playlistSource!.addAll(rest.map(_buildAudioSource).toList());
+        }
+      }
+    } else {
+      if (_unshuffledPlaylist != null && _unshuffledPlaylist!.isNotEmpty) {
+        final original = _unshuffledPlaylist!;
+        _unshuffledPlaylist = null;
+
+        final currentSong = state;
+        final currentSongId = currentSong?.id;
+
+        final restFromOriginal = original.where((s) {
+          return playlist.any((p) => p.id == s.id) && s.id != currentSongId;
+        }).toList();
+
+        final prefix = playlist.sublist(0, currentSongIndex + 1);
+        playlist = [...prefix, ...restFromOriginal];
+
+        if (_playlistSource != null) {
+          while (_playlistSource!.length > currentSongIndex + 1) {
+            await _playlistSource!.removeAt(_playlistSource!.length - 1);
+          }
+          await _playlistSource!.addAll(restFromOriginal.map(_buildAudioSource).toList());
+        }
+      }
+    }
+    ref.read(queueVersionProvider.notifier).state++;
   }
 }
 

@@ -11,6 +11,7 @@ class QueuePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(queueVersionProvider);
     final currentSong = ref.watch(currentSongNotifierProvider);
     final notifier = ref.read(currentSongNotifierProvider.notifier);
     final playlist = notifier.playlist;
