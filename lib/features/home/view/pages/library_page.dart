@@ -340,7 +340,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => CustomPlaylistDetailsPage(playlistName: playlist.name),
+                builder: (context) => CustomPlaylistDetailsPage(
+                  playlistId: playlist.id,
+                  playlistName: playlist.name,
+                ),
               ),
             );
           },
@@ -361,7 +364,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           trailing: IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
             onPressed: () {
-              ref.read(localPlaylistsProvider.notifier).deletePlaylist(playlist.name);
+              ref.read(localPlaylistsProvider.notifier).deletePlaylist(playlist.id);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Deleted playlist "${playlist.name}"')),
               );
@@ -838,9 +841,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 // Custom Playlist Details Page Widget (Draggable reordering, custom covers, descriptions, and collaboration)
 // -----------------------------------------------------------------------------
 class CustomPlaylistDetailsPage extends ConsumerStatefulWidget {
+  final String? playlistId;
   final String playlistName;
 
-  const CustomPlaylistDetailsPage({super.key, required this.playlistName});
+  const CustomPlaylistDetailsPage({super.key, this.playlistId, required this.playlistName});
 
   @override
   ConsumerState<CustomPlaylistDetailsPage> createState() => _CustomPlaylistDetailsPageState();
@@ -851,8 +855,8 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
   Widget build(BuildContext context) {
     final playlists = ref.watch(localPlaylistsProvider);
     final playlist = playlists.firstWhere(
-      (p) => p.name == widget.playlistName,
-      orElse: () => CustomPlaylist(name: widget.playlistName, songs: []),
+      (p) => (widget.playlistId != null && p.id == widget.playlistId) || p.name == widget.playlistName,
+      orElse: () => CustomPlaylist(id: widget.playlistId ?? '', name: widget.playlistName, songs: []),
     );
 
     return Scaffold(
@@ -1014,7 +1018,7 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                     : ReorderableListView.builder(
                         itemCount: playlist.songs.length,
                         onReorder: (oldIndex, newIndex) {
-                          ref.read(localPlaylistsProvider.notifier).reorderSongInPlaylist(playlist.name, oldIndex, newIndex);
+                          ref.read(localPlaylistsProvider.notifier).reorderSongInPlaylist(playlist.id, oldIndex, newIndex);
                         },
                         itemBuilder: (context, index) {
                           final song = playlist.songs[index];
@@ -1066,7 +1070,7 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                                 IconButton(
                                   icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
                                   onPressed: () {
-                                    ref.read(localPlaylistsProvider.notifier).removeSongFromPlaylist(playlist.name, song.id);
+                                    ref.read(localPlaylistsProvider.notifier).removeSongFromPlaylist(playlist.id, song.id);
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Removed "${song.song_name}"')),
                                     );
@@ -1172,10 +1176,11 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                         onPressed: () async {
                           final newName = nameController.text.trim();
                           if (newName.isNotEmpty && newName != playlist.name) {
-                            await ref.read(localPlaylistsProvider.notifier).renamePlaylist(playlist.name, newName);
+                            await ref.read(localPlaylistsProvider.notifier).renamePlaylist(playlist.id, newName);
                           }
                           await ref.read(localPlaylistsProvider.notifier).updatePlaylistDetails(
-                                newName.isNotEmpty ? newName : playlist.name,
+                                playlist.id,
+                                name: newName.isNotEmpty ? newName : null,
                                 description: descController.text.trim(),
                                 customCoverPath: coverPath,
                                 isCollaborative: isCollab,

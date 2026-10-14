@@ -47,7 +47,7 @@ void showAddToPlaylistDialog(BuildContext context, WidgetRef ref, SongModel song
                           return ListTile(
                             title: Text(p.name, style: const TextStyle(color: Colors.white)),
                             onTap: () {
-                              ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(p.name, song);
+                              ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(p.id, song);
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Added to "${p.name}"')),
@@ -93,8 +93,8 @@ void _showCreatePlaylistInline(BuildContext context, WidgetRef ref, SongModel so
           onPressed: () async {
             final name = controller.text.trim();
             if (name.isNotEmpty) {
-              await ref.read(localPlaylistsProvider.notifier).createPlaylist(name);
-              await ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(name, song);
+              final newId = await ref.read(localPlaylistsProvider.notifier).createPlaylist(name);
+              await ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(newId, song);
               if (context.mounted) {
                 // Close the create dialog
                 Navigator.pop(context);
