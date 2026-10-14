@@ -12,6 +12,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 part 'current_song_notifier.g.dart';
 
 final shuffleProvider = StateProvider<bool>((ref) => false);
@@ -484,12 +485,21 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     }
   }
 
+  bool _notificationPermissionRequested = false;
+
   void updateSong(SongModel song) async {
     updatePlaylist([song], 0);
   }
 
   void updatePlaylist(List<SongModel> songs, int index) async {
     final requestId = ++_playRequestId;
+
+    if (!_notificationPermissionRequested) {
+      _notificationPermissionRequested = true;
+      try {
+        Permission.notification.request().catchError((_) => PermissionStatus.denied);
+      } catch (_) {}
+    }
 
     try {
       if (!_isServerStarted && _serverStartFuture != null) {

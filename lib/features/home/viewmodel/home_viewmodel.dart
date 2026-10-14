@@ -8,6 +8,7 @@ import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/features/home/repositories/home_repository.dart';
 import 'package:client/core/python_backend.dart';
+import 'package:client/core/providers/bootstrap_provider.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 part 'home_viewmodel.g.dart';
@@ -28,6 +29,7 @@ Future<List<SongModel>> getAllSongs(GetAllSongsRef ref) async {
 
 @riverpod
 Future<bool> isYTMConnected(IsYTMConnectedRef ref) async {
+  await ref.watch(bootstrapProvider.future);
   final status = await PythonBackend.checkAuthStatus();
   return status['authenticated'] ?? false;
 }
@@ -48,6 +50,7 @@ Future<List<SongModel>> getFavSongs(GetFavSongsRef ref) async {
 
 @riverpod
 Future<List<Map<String, dynamic>>> getHomeFeedSections(GetHomeFeedSectionsRef ref) async {
+  await ref.watch(bootstrapProvider.future);
   final res = await PythonBackend.getHomeFeed();
   if (res['success'] == true) {
     final List sections = res['sections'] ?? [];

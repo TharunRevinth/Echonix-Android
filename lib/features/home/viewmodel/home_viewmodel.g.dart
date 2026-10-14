@@ -20,7 +20,7 @@ final getAllSongsProvider = AutoDisposeFutureProvider<List<SongModel>>.internal(
 );
 
 typedef GetAllSongsRef = AutoDisposeFutureProviderRef<List<SongModel>>;
-String _$isYTMConnectedHash() => r'e2da4f6b0dc62496538f4846d435c8de72d64c58';
+String _$isYTMConnectedHash() => r'c5b858b8818037acdf4a42bae9c095a352e4076b';
 
 /// See also [isYTMConnected].
 @ProviderFor(isYTMConnected)
@@ -50,7 +50,7 @@ final getFavSongsProvider = AutoDisposeFutureProvider<List<SongModel>>.internal(
 
 typedef GetFavSongsRef = AutoDisposeFutureProviderRef<List<SongModel>>;
 String _$getHomeFeedSectionsHash() =>
-    r'2cd0f0370d13049c9e478c83d3c9341f5c91411e';
+    r'952da6b0ab87ef2a9ddea6b5c193f9860b85dec3';
 
 /// See also [getHomeFeedSections].
 @ProviderFor(getHomeFeedSections)
