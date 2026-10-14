@@ -123,7 +123,46 @@ class PythonBackend {
   }
 
   static Future<Map<String, dynamic>> getFavSongs() async {
-    return _call('get_liked_songs', {});
+    return getLikedSongs();
+  }
+
+  static Future<Map<String, dynamic>> getLikedSongs({int limit = 500}) async {
+    return _call('get_liked_songs', {'limit': limit});
+  }
+
+  static Future<Map<String, dynamic>> createPlaylist(
+    String title, {
+    String description = '',
+    List<String>? videoIds,
+  }) async {
+    return _call('create_playlist', {
+      'title': title,
+      'description': description,
+      'video_ids': videoIds,
+    });
+  }
+
+  static Future<Map<String, dynamic>> renamePlaylist(String playlistId, String title) async {
+    return _call('rename_playlist', {'playlist_id': playlistId, 'title': title});
+  }
+
+  static Future<Map<String, dynamic>> deletePlaylist(String playlistId) async {
+    return _call('delete_playlist', {'playlist_id': playlistId});
+  }
+
+  static Future<Map<String, dynamic>> addPlaylistItems(String playlistId, List<String> videoIds) async {
+    return _call('add_playlist_items', {'playlist_id': playlistId, 'video_ids': videoIds});
+  }
+
+  static Future<Map<String, dynamic>> removePlaylistItems(
+    String playlistId,
+    List<Map<String, String>> items,
+  ) async {
+    return _call('remove_playlist_items', {'playlist_id': playlistId, 'items': items});
+  }
+
+  static Future<Map<String, dynamic>> getLibraryPlaylists({int limit = 50}) async {
+    return _call('get_library_playlists', {'limit': limit});
   }
 
   static Future<Map<String, dynamic>> downloadSong(

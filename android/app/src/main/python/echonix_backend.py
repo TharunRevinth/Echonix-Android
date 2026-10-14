@@ -319,7 +319,8 @@ def get_playlist_details(playlist_id):
                     'artist': ', '.join(a['name'] for a in r.get('artists', [])) or 'Unknown',
                     'album': r.get('album', {}).get('name', '') if r.get('album') else '',
                     'thumbnail': (r.get('thumbnails') or [{}])[-1].get('url', ''),
-                    'duration': r.get('duration_seconds', 0)
+                    'duration': r.get('duration_seconds', 0),
+                    'setVideoId': r.get('setVideoId', '')
                 })
         return json.dumps({
             "success": True,
@@ -626,38 +627,47 @@ def get_stream_url(video_id):
     return resolve_stream(video_id)
 
 
+def _extract_http_status(e):
+    if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+        return e.response.status_code
+    if hasattr(e, 'status_code'):
+        return e.status_code
+    if hasattr(e, 'code'):
+        return e.code
+    match = re.search(r'\b(401|403|404|429|500|502|503)\b', str(e))
+    if match:
+        return int(match.group(1))
+    return None
+
 def rate_song(video_id, rating):
     global ytm
     if not ytm:
-        return json.dumps({"success": False, "error": "YTMusic not initialized"})
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
     if rating not in ('LIKE', 'DISLIKE', 'INDIFFERENT'):
         return json.dumps({"success": False, "error": f"Invalid rating '{rating}'. Must be LIKE, DISLIKE, or INDIFFERENT."})
     try:
         ytm.rate_song(video_id, rating)
         return json.dumps({"success": True})
     except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
 
 def add_history(video_id):
     global ytm
     if not ytm:
-        return json.dumps({"success": False, "error": "YTMusic not initialized"})
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
     try:
-        try:
-            song_info = ytm.get_song(video_id)
-            ytm.add_history_item(song_info)
-        except:
-            pass
+        song_info = ytm.get_song(video_id)
+        ytm.add_history_item(song_info)
         return json.dumps({"success": True})
     except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
 
-def get_liked_songs():
+def get_liked_songs(limit=500):
     global ytm
     if not ytm:
-        return json.dumps({"success": False, "error": "YTMusic not initialized"})
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
     try:
-        res = ytm.get_liked_songs(limit=100)
+        res = ytm.get_liked_songs(limit=int(limit))
         tracks = []
         for r in res.get('tracks', []):
             vid = r.get('videoId')
@@ -668,11 +678,92 @@ def get_liked_songs():
                     'artist': ', '.join(a['name'] for a in r.get('artists', [])) or 'Unknown',
                     'album': r.get('album', {}).get('name', '') if r.get('album') else '',
                     'thumbnail': (r.get('thumbnails') or [{}])[-1].get('url', ''),
-                    'duration': r.get('duration_seconds', 0)
+                    'duration': r.get('duration_seconds', 0),
+                    'setVideoId': r.get('setVideoId', '')
                 })
         return json.dumps({"success": True, "songs": tracks})
     except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def create_playlist(title, description="", video_ids=None):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        vids = video_ids if isinstance(video_ids, list) else ([video_ids] if video_ids else None)
+        res = ytm.create_playlist(title=title, description=description or "", privacy_status="PRIVATE", video_ids=vids)
+        playlist_id = res if isinstance(res, str) else (res.get('playlistId') if isinstance(res, dict) else str(res))
+        return json.dumps({"success": True, "playlistId": playlist_id})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def rename_playlist(playlist_id, title):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        res = ytm.edit_playlist(playlist_id, title=title)
+        return json.dumps({"success": True, "result": res if isinstance(res, (str, dict)) else "ok"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def delete_playlist(playlist_id):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        res = ytm.delete_playlist(playlist_id)
+        return json.dumps({"success": True, "result": res if isinstance(res, (str, dict)) else "ok"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def add_playlist_items(playlist_id, video_ids):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        vids = video_ids if isinstance(video_ids, list) else [video_ids]
+        res = ytm.add_playlist_items(playlist_id, videoIds=vids, duplicates=False)
+        return json.dumps({"success": True, "result": res if isinstance(res, (str, dict)) else "ok"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def remove_playlist_items(playlist_id, items):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        clean_items = []
+        for it in items:
+            if isinstance(it, dict):
+                clean_items.append({
+                    'videoId': it.get('videoId') or it.get('id', ''),
+                    'setVideoId': it.get('setVideoId') or it.get('set_video_id', '')
+                })
+        res = ytm.remove_playlist_items(playlist_id, clean_items)
+        return json.dumps({"success": True, "result": res if isinstance(res, (str, dict)) else "ok"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
+
+def get_library_playlists(limit=50):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized", "http_status": 401})
+    try:
+        res = ytm.get_library_playlists(limit=int(limit))
+        playlists = []
+        for p in res:
+            pid = p.get('playlistId')
+            if pid:
+                playlists.append({
+                    'id': pid,
+                    'title': p.get('title', ''),
+                    'count': p.get('count', 0),
+                    'thumbnails': p.get('thumbnails', [])
+                })
+        return json.dumps({"success": True, "playlists": playlists})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
 
 def download_song(video_id, title, artist, thumbnail_url="", playlist_name=""):
     t = threading.Thread(target=_download_song_thread, args=(video_id, title, artist, thumbnail_url, playlist_name))
@@ -924,6 +1015,12 @@ WHITELIST = {
     'get_search_suggestions': get_search_suggestions,
     'get_trending_searches': get_trending_searches,
     'get_downloaded_songs': get_downloaded_songs,
+    'create_playlist': create_playlist,
+    'rename_playlist': rename_playlist,
+    'delete_playlist': delete_playlist,
+    'add_playlist_items': add_playlist_items,
+    'remove_playlist_items': remove_playlist_items,
+    'get_library_playlists': get_library_playlists,
 }
 
 def dispatch(fn_name: str, args_json: str) -> str:

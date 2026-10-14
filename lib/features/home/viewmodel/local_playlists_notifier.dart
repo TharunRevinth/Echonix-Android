@@ -33,6 +33,7 @@ class CustomPlaylist {
   final bool isCollaborative;
   final List<String> collaborators;
   final int version;
+  final bool syncEnabled;
 
   CustomPlaylist({
     required this.id,
@@ -44,6 +45,7 @@ class CustomPlaylist {
     this.isCollaborative = false,
     this.collaborators = const [],
     this.version = 1,
+    this.syncEnabled = true,
   });
 
   Map<String, dynamic> toMap() => {
@@ -56,6 +58,7 @@ class CustomPlaylist {
         'isCollaborative': isCollaborative,
         'collaborators': collaborators,
         'version': version,
+        'syncEnabled': syncEnabled,
       };
 
   factory CustomPlaylist.fromMap(Map<String, dynamic> map) {
@@ -73,6 +76,7 @@ class CustomPlaylist {
       isCollaborative: map['isCollaborative'] ?? false,
       collaborators: List<String>.from(map['collaborators'] ?? []),
       version: map['version'] ?? 1,
+      syncEnabled: map['syncEnabled'] ?? true,
     );
   }
 
@@ -86,6 +90,7 @@ class CustomPlaylist {
     bool? isCollaborative,
     List<String>? collaborators,
     int? version,
+    bool? syncEnabled,
   }) {
     return CustomPlaylist(
       id: id ?? this.id,
@@ -97,6 +102,7 @@ class CustomPlaylist {
       isCollaborative: isCollaborative ?? this.isCollaborative,
       collaborators: collaborators ?? this.collaborators,
       version: version ?? this.version,
+      syncEnabled: syncEnabled ?? this.syncEnabled,
     );
   }
 }
@@ -186,6 +192,7 @@ class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
     String? customCoverPath,
     bool? isCollaborative,
     String? remoteId,
+    bool? syncEnabled,
   }) async {
     state = state.map((p) {
       if (p.id == idOrName || p.name == idOrName) {
@@ -195,6 +202,7 @@ class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
           customCoverPath: customCoverPath ?? p.customCoverPath,
           isCollaborative: isCollaborative ?? p.isCollaborative,
           remoteId: remoteId ?? p.remoteId,
+          syncEnabled: syncEnabled ?? p.syncEnabled,
           version: p.version + 1,
         );
       }

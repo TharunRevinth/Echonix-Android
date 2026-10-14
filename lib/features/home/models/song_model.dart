@@ -10,6 +10,7 @@ class SongModel {
   final String hex_code;
   final int? duration_seconds;
   final String? album;
+  final String? setVideoId;
 
   SongModel({
     required this.id,
@@ -20,6 +21,7 @@ class SongModel {
     required this.hex_code,
     this.duration_seconds,
     this.album,
+    this.setVideoId,
   });
 
   SongModel copyWith({
@@ -31,6 +33,7 @@ class SongModel {
     String? hex_code,
     int? duration_seconds,
     String? album,
+    String? setVideoId,
   }) {
     return SongModel(
       id: id ?? this.id,
@@ -41,6 +44,7 @@ class SongModel {
       hex_code: hex_code ?? this.hex_code,
       duration_seconds: duration_seconds ?? this.duration_seconds,
       album: album ?? this.album,
+      setVideoId: setVideoId ?? this.setVideoId,
     );
   }
 
@@ -54,6 +58,7 @@ class SongModel {
       'hex_code': hex_code,
       if (duration_seconds != null) 'duration_seconds': duration_seconds,
       if (album != null) 'album': album,
+      if (setVideoId != null) 'setVideoId': setVideoId,
     };
   }
 
@@ -69,6 +74,7 @@ class SongModel {
           ? (map['duration_seconds'] as num).toInt()
           : null,
       album: map['album']?.toString(),
+      setVideoId: (map['setVideoId'] ?? map['set_video_id'])?.toString(),
     );
   }
 
@@ -145,6 +151,8 @@ class SongModel {
       songUrl = 'https://www.youtube.com/watch?v=$id';
     }
 
+    final setVideoId = (m['setVideoId'] ?? m['set_video_id'])?.toString();
+
     return SongModel(
       id: id,
       song_name: title,
@@ -154,6 +162,7 @@ class SongModel {
       hex_code: hexCode ?? (m['hex_code']?.toString() ?? '000000'),
       duration_seconds: durationSeconds,
       album: album,
+      setVideoId: setVideoId,
     );
   }
 
@@ -164,7 +173,7 @@ class SongModel {
 
   @override
   String toString() {
-    return 'SongModel(id: $id, song_name: $song_name, artist: $artist, thumbnail_url: $thumbnail_url, song_url: $song_url, hex_code: $hex_code, duration_seconds: $duration_seconds, album: $album)';
+    return 'SongModel(id: $id, song_name: $song_name, artist: $artist, thumbnail_url: $thumbnail_url, song_url: $song_url, hex_code: $hex_code, duration_seconds: $duration_seconds, album: $album, setVideoId: $setVideoId)';
   }
 
   @override
@@ -178,7 +187,8 @@ class SongModel {
         other.song_url == song_url &&
         other.hex_code == hex_code &&
         other.duration_seconds == duration_seconds &&
-        other.album == album;
+        other.album == album &&
+        other.setVideoId == setVideoId;
   }
 
   @override
@@ -190,6 +200,7 @@ class SongModel {
         song_url.hashCode ^
         hex_code.hashCode ^
         duration_seconds.hashCode ^
-        album.hashCode;
+        album.hashCode ^
+        setVideoId.hashCode;
   }
 }

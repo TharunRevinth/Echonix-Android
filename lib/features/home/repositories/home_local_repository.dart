@@ -25,6 +25,10 @@ class HomeLocalRepository {
     'liked_ids',
     'liked_songs_metadata',
     'sync_outbox',
+    'sync_failed',
+    'library_playlists_cache',
+    'signals',
+    'upnext_cache',
     'song_cache_index',
     'custom_playlists_v2',
   };
