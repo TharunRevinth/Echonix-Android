@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 part 'current_song_notifier.g.dart';
 
 final shuffleProvider = StateProvider<bool>((ref) => false);
@@ -143,6 +144,23 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         print("Failed to initialize equalizer: $e");
         audioPlayer = AudioPlayer();
       }
+
+      audioPlayer!.androidAudioSessionIdStream.listen((sessionId) async {
+        if (sessionId != null && sessionId != 0) {
+          try {
+            const channel = MethodChannel('com.echonix.music/audio_effects');
+            await channel.invokeMethod('initEffects', {'sessionId': sessionId});
+            
+            final prefs = await SharedPreferences.getInstance();
+            final virtStrength = prefs.getInt('virtualizer_strength') ?? 0;
+            final bassStrength = prefs.getInt('bass_boost_strength') ?? 0;
+            await channel.invokeMethod('setVirtualizerStrength', {'strength': virtStrength});
+            await channel.invokeMethod('setBassBoostStrength', {'strength': bassStrength});
+          } catch (e) {
+            print("Failed to initialize native audio effects: $e");
+          }
+        }
+      });
     } else {
       audioPlayer = AudioPlayer();
     }
@@ -234,9 +252,10 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       }
 
       _initAudioPlayer();
-      // Do not await stop() here to prevent deadlocks when switching tracks while playing.
-      // Pausing tells the engine to stop playing the active stream immediately.
-      audioPlayer!.pause();
+      // Safely stop the player first to cancel any active platform connections and prevent deadlocks/hangs
+      try {
+        await audioPlayer!.stop();
+      } catch (_) {}
 
       playlist = songs;
       currentSongIndex = index;
@@ -439,6 +458,8 @@ class EqualizerSettings {
   final List<double> customGains; // Dynamic bands gains
   final List<double> frequencies; // Center frequencies in Hz
   final Map<String, List<double>> customPresets;
+  final int virtualizerStrength; // 0 to 1000
+  final int bassBoostStrength; // 0 to 1000
 
   EqualizerSettings({
     required this.enabled,
@@ -446,6 +467,8 @@ class EqualizerSettings {
     required this.customGains,
     required this.frequencies,
     required this.customPresets,
+    required this.virtualizerStrength,
+    required this.bassBoostStrength,
   });
 
   EqualizerSettings copyWith({
@@ -454,6 +477,8 @@ class EqualizerSettings {
     List<double>? customGains,
     List<double>? frequencies,
     Map<String, List<double>>? customPresets,
+    int? virtualizerStrength,
+    int? bassBoostStrength,
   }) {
     return EqualizerSettings(
       enabled: enabled ?? this.enabled,
@@ -461,6 +486,8 @@ class EqualizerSettings {
       customGains: customGains ?? this.customGains,
       frequencies: frequencies ?? this.frequencies,
       customPresets: customPresets ?? this.customPresets,
+      virtualizerStrength: virtualizerStrength ?? this.virtualizerStrength,
+      bassBoostStrength: bassBoostStrength ?? this.bassBoostStrength,
     );
   }
 }
@@ -475,6 +502,8 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
           customGains: [0.0, 0.0, 0.0, 0.0, 0.0],
           frequencies: [60.0, 230.0, 910.0, 4000.0, 14000.0],
           customPresets: {},
+          virtualizerStrength: 0,
+          bassBoostStrength: 0,
         )) {
     _loadPresets();
     _initFrequencies();
@@ -505,16 +534,23 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
   Future<void> _loadPresets() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString('custom_eq_presets');
+    final virtStrength = prefs.getInt('virtualizer_strength') ?? 0;
+    final bassStrength = prefs.getInt('bass_boost_strength') ?? 0;
+
+    Map<String, List<double>> loaded = {};
     if (data != null) {
       try {
         final Map<String, dynamic> decoded = jsonDecode(data);
-        final Map<String, List<double>> loaded = {};
         decoded.forEach((key, val) {
           loaded[key] = List<double>.from((val as List).map((e) => (e as num).toDouble()));
         });
-        state = state.copyWith(customPresets: loaded);
       } catch (_) {}
     }
+    state = state.copyWith(
+      customPresets: loaded,
+      virtualizerStrength: virtStrength,
+      bassBoostStrength: bassStrength,
+    );
   }
 
   Future<void> saveCustomPreset(String name) async {
@@ -620,6 +656,32 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       }
     } catch (e) {
       print("Error applying EQ settings: $e");
+    }
+  }
+
+  Future<void> setVirtualizerStrength(int strength) async {
+    state = state.copyWith(virtualizerStrength: strength);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('virtualizer_strength', strength);
+    
+    try {
+      const channel = MethodChannel('com.echonix.music/audio_effects');
+      await channel.invokeMethod('setVirtualizerStrength', {'strength': strength});
+    } catch (e) {
+      print("Failed to set native virtualizer strength: $e");
+    }
+  }
+
+  Future<void> setBassBoostStrength(int strength) async {
+    state = state.copyWith(bassBoostStrength: strength);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('bass_boost_strength', strength);
+    
+    try {
+      const channel = MethodChannel('com.echonix.music/audio_effects');
+      await channel.invokeMethod('setBassBoostStrength', {'strength': strength});
+    } catch (e) {
+      print("Failed to set native bass boost strength: $e");
     }
   }
 }

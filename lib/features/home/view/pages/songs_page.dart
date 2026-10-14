@@ -7,6 +7,7 @@ import 'package:client/features/home/view/pages/playlist_details_page.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:client/features/home/view/pages/home_page.dart';
 import 'package:client/core/python_backend.dart';
+import 'package:client/features/home/viewmodel/local_playlists_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -248,6 +249,8 @@ class SongsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final recentlyPlayedSongs = ref.watch(homeViewModelProvider.notifier).getRecentlyPlayedSongs();
     final ytmConnected = ref.watch(isYTMConnectedProvider).value ?? false;
+    final currentUser = ref.watch(currentUserNotifierProvider);
+    ref.watch(localPlaylistsProvider); // Warm up local playlists so they are pre-loaded
 
     // Use a maximum of 6 recently played items for the Spotify grid
     final gridItems = recentlyPlayedSongs.take(6).toList();

@@ -398,7 +398,101 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
                       const SizedBox(height: 24),
 
-                      // 3. Audio Equalizer Section
+                      // 3. Audio Enhancement (Spatial Stereo & Bass) Section
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.spatial_audio_off_outlined, color: Colors.tealAccent, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Spatial Stereo & Bass Boost',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Enhance your listening experience with native spatial stereo virtualization and hardware-accelerated bass boost.',
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Bass Boost Slider
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.speaker_group_outlined, color: Colors.tealAccent.withOpacity(0.8), size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text('Hardware Bass Boost', style: TextStyle(color: Colors.white, fontSize: 14)),
+                                  ],
+                                ),
+                                Text(
+                                  '${(eqSettings.bassBoostStrength / 10).toStringAsFixed(0)}%',
+                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: eqSettings.bassBoostStrength.toDouble(),
+                              min: 0,
+                              max: 1000,
+                              activeColor: Colors.tealAccent,
+                              inactiveColor: Colors.white12,
+                              onChanged: (val) {
+                                ref.read(equalizerProvider.notifier).setBassBoostStrength(val.toInt());
+                              },
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Spatial Stereo (Virtualizer) Slider
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.graphic_eq_outlined, color: Colors.tealAccent.withOpacity(0.8), size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text('Stereo Widening (3D Spatial)', style: TextStyle(color: Colors.white, fontSize: 14)),
+                                  ],
+                                ),
+                                Text(
+                                  '${(eqSettings.virtualizerStrength / 10).toStringAsFixed(0)}%',
+                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: eqSettings.virtualizerStrength.toDouble(),
+                              min: 0,
+                              max: 1000,
+                              activeColor: Colors.tealAccent,
+                              inactiveColor: Colors.white12,
+                              onChanged: (val) {
+                                ref.read(equalizerProvider.notifier).setVirtualizerStrength(val.toInt());
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // 4. Audio Equalizer Section
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -557,6 +651,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 );
                               }),
                             ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 48),
+                      // Professional Footer Credits
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              'ECHONIX',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white.withOpacity(0.9),
+                                letterSpacing: 3.0,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Version 1.0.0 (Debug Build)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.4),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Developed & Created by Tharun Revinth',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.purpleAccent.withOpacity(0.8),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '© 2026 Echonix Music. All Rights Reserved.',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withOpacity(0.25),
+                              ),
+                            ),
                           ],
                         ),
                       ),

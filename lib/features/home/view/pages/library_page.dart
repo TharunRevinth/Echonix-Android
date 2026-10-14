@@ -889,17 +889,67 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
               if (playlist.songs.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, 0);
-                    },
-                    icon: const Icon(Icons.play_arrow, color: Colors.black),
-                    label: const Text('Play All', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, 0);
+                              },
+                              icon: const Icon(Icons.play_arrow, color: Colors.black),
+                              label: const Text('Play All', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                final shuffled = List<SongModel>.from(playlist.songs)..shuffle();
+                                ref.read(currentSongNotifierProvider.notifier).updatePlaylist(shuffled, 0);
+                              },
+                              icon: const Icon(Icons.shuffle, color: Colors.white),
+                              label: const Text('Shuffle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white24),
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Downloading ${playlist.songs.length} tracks in background...')),
+                          );
+                          for (final song in playlist.songs) {
+                            await PythonBackend.downloadSong(
+                              song.id,
+                              song.song_name,
+                              song.artist,
+                              song.thumbnail_url,
+                              playlist.name,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.download, color: Colors.white),
+                        label: const Text('Download All', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white24),
+                          minimumSize: const Size.fromHeight(44),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -943,6 +993,26 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                IconButton(
+                                  icon: const Icon(Icons.download, color: Colors.white70, size: 20),
+                                  onPressed: () async {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Downloading "${song.song_name}" in background...')),
+                                    );
+                                    final res = await PythonBackend.downloadSong(
+                                      song.id,
+                                      song.song_name,
+                                      song.artist,
+                                      song.thumbnail_url,
+                                      playlist.name,
+                                    );
+                                    if (res['success'] != true) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to download: ${res['error']}')),
+                                      );
+                                    }
+                                  },
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
                                   onPressed: () {

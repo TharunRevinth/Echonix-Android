@@ -186,25 +186,49 @@ def search_songs(query):
     global ytm
     try:
         results = []
-        if ytm:
-            try:
+        # Try to search with filter='songs' (YouTube Music official tracks) first
+        try:
+            if ytm:
                 results = ytm.search(query, filter='songs', limit=30)
-            except Exception:
+            else:
                 results = YTMusic().search(query, filter='songs', limit=30)
-        else:
-            results = YTMusic().search(query, filter='songs', limit=30)
+        except Exception:
+            pass
+
+        # If no songs are found or search failed, fall back to general search (songs + videos mix)
+        if not results:
+            try:
+                if ytm:
+                    results = ytm.search(query, limit=30)
+                else:
+                    results = YTMusic().search(query, limit=30)
+            except Exception:
+                results = []
 
         songs = []
         for r in results:
             vid = r.get('videoId')
             if vid:
+                title = r.get('title', '')
+                artist = ', '.join(a['name'] for a in r.get('artists', [])) or 'Unknown'
+                duration = r.get('duration_seconds', 0)
+                
+                # Apply filterMusicResults logic from Echonix client:
+                title_lower = title.lower()
+                # 1. Filter out vlogs, podcasts, tutorials
+                if any(k in title_lower for k in ['vlog', 'podcast', 'tutorial']):
+                    continue
+                # 2. Filter out items where duration is too long (over 9 minutes) or too short (under 45s)
+                if duration > 0 and (duration > 540 or duration < 45):
+                    continue
+
                 songs.append({
                     'id': vid,
-                    'title': r.get('title', ''),
-                    'artist': ', '.join(a['name'] for a in r.get('artists', [])) or 'Unknown',
+                    'title': title,
+                    'artist': artist,
                     'album': r.get('album', {}).get('name', '') if r.get('album') else '',
                     'thumbnail': (r.get('thumbnails') or [{}])[-1].get('url', ''),
-                    'duration': r.get('duration_seconds', 0)
+                    'duration': duration
                 })
         return json.dumps({"success": True, "songs": songs})
     except Exception as e:
@@ -436,7 +460,7 @@ def get_stream_url(video_id):
 
         out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
         opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+            'format': '251/140/bestaudio/best',
             'outtmpl': out_tmpl,
             'quiet': True,
             'no_warnings': True,
@@ -448,7 +472,7 @@ def get_stream_url(video_id):
                 'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
             },
             'extractor_args': {
-                'youtube': {'player_client': ['android_vr']}
+                'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
             }
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -526,12 +550,18 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
         out_path = os.path.join(dl_dir, filename)
 
         opts = {
-            'format': '140/bestaudio[ext=m4a]/bestaudio/best',
+            'format': '251/140/bestaudio/best',
             'outtmpl': out_path,
             'quiet': True,
             'no_warnings': True,
             'noplaylist': True,
             'nocheckcertificate': True,
+            'http_headers': {
+                'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+            },
+            'extractor_args': {
+                'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
+            }
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
