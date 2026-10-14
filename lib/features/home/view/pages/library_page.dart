@@ -159,10 +159,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
     if (confirm == true) {
       try {
-        final mp3File = File(song.song_url);
+        final songFile = File(song.song_url);
         final jsonFile = File('${song.song_url}.json');
-        if (await mp3File.exists()) await mp3File.delete();
+        if (await songFile.exists()) await songFile.delete();
         if (await jsonFile.exists()) await jsonFile.delete();
+        final altAudio = File(song.song_url.endsWith('.mp3')
+            ? song.song_url.replaceAll('.mp3', '.m4a')
+            : song.song_url.replaceAll('.m4a', '.mp3'));
+        final altJson = File('${altAudio.path}.json');
+        if (await altAudio.exists()) await altAudio.delete();
+        if (await altJson.exists()) await altJson.delete();
+        PythonBackend.deleteDownloadedSong(song.id);
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Deleted "${song.song_name}"')),
@@ -198,10 +205,17 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     if (confirm == true) {
       try {
         for (final song in songs) {
-          final mp3File = File(song.song_url);
+          final songFile = File(song.song_url);
           final jsonFile = File('${song.song_url}.json');
-          if (await mp3File.exists()) await mp3File.delete();
+          if (await songFile.exists()) await songFile.delete();
           if (await jsonFile.exists()) await jsonFile.delete();
+          final altAudio = File(song.song_url.endsWith('.mp3')
+              ? song.song_url.replaceAll('.mp3', '.m4a')
+              : song.song_url.replaceAll('.m4a', '.mp3'));
+          final altJson = File('${altAudio.path}.json');
+          if (await altAudio.exists()) await altAudio.delete();
+          if (await altJson.exists()) await altJson.delete();
+          PythonBackend.deleteDownloadedSong(song.id);
         }
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(

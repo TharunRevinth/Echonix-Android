@@ -14,6 +14,7 @@ ytm = None
 creds_file_path = None
 ytm_cache_path = None
 _ytm_lock = threading.Lock()
+_download_semaphore = threading.Semaphore(2)
 
 def init_ytmusic(creds_dir):
     global ytm, creds_file_path, ytm_cache_path
@@ -674,75 +675,116 @@ def get_liked_songs():
         return json.dumps({"success": False, "error": str(e)})
 
 def download_song(video_id, title, artist, thumbnail_url="", playlist_name=""):
-    import threading
     t = threading.Thread(target=_download_song_thread, args=(video_id, title, artist, thumbnail_url, playlist_name))
     t.start()
     return json.dumps({"success": True, "message": "Download started in background"})
 
 def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_name=""):
     global ytm_cache_path
-    try:
-        import os
-        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
-        safe_artist = "".join(c for c in artist if c.isalnum() or c in (' ', '_', '-')).rstrip()
-        filename = f"{safe_artist} - {safe_title}.mp3"
+    if not ytm_cache_path:
+        return
+    dl_dir = os.path.join(ytm_cache_path, "downloads")
+    os.makedirs(dl_dir, exist_ok=True)
 
-        dl_dir = os.path.join(ytm_cache_path, "downloads")
-        os.makedirs(dl_dir, exist_ok=True)
-        out_path = os.path.join(dl_dir, filename)
+    part_audio = os.path.join(dl_dir, f"{video_id}.m4a.part")
+    part_meta = os.path.join(dl_dir, f"{video_id}.m4a.json.part")
+    final_audio = os.path.join(dl_dir, f"{video_id}.m4a")
+    final_meta = os.path.join(dl_dir, f"{video_id}.m4a.json")
 
-        opts = {
-            'format': '251/140/bestaudio/best',
-            'outtmpl': out_path,
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'http_headers': {
-                'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
-            }
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
-
-        # Try to download lyrics
-        lyrics_data = None
+    with _download_semaphore:
         try:
-            l_res = json.loads(get_lyrics(title, artist))
-            if l_res.get("success") == True:
-                lyrics_data = {
-                    "synced": l_res.get("synced", False),
-                    "lyrics": l_res.get("lyrics", "")
-                }
-        except Exception as lex:
-            print(f"Lyrics download error: {lex}")
+            # Clean up any leftover partial files
+            for p in (part_audio, part_meta):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except:
+                        pass
 
-        meta_path = out_path + ".json"
-        with open(meta_path, 'w') as f:
-            json.dump({
+            opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio',
+                'outtmpl': part_audio,
+                'quiet': True,
+                'no_warnings': True,
+                'noplaylist': True,
+                'nocheckcertificate': True,
+                'http_headers': {
+                    'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+                },
+                'extractor_args': {
+                    'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
+                }
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
+
+            # Fetch lyrics
+            lyrics_data = None
+            try:
+                l_res = json.loads(get_lyrics(title, artist))
+                if l_res.get("success") == True:
+                    lyrics_data = {
+                        "synced": l_res.get("synced", False),
+                        "lyrics": l_res.get("lyrics", "")
+                    }
+            except Exception as lex:
+                pass
+
+            meta_data = {
                 "id": video_id,
                 "title": title,
                 "artist": artist,
-                "path": out_path,
+                "path": final_audio,
                 "thumbnail_url": thumbnail_url,
                 "playlist_name": playlist_name,
                 "lyrics_data": lyrics_data
-            }, f)
+            }
+            with open(part_meta, 'w', encoding='utf-8') as f:
+                json.dump(meta_data, f, ensure_ascii=False, indent=2)
+
+            # Atomic rename on completion
+            os.replace(part_audio, final_audio)
+            os.replace(part_meta, final_meta)
+
+        except Exception as e:
+            # Delete partial files if download failed
+            for p in (part_audio, part_meta):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except:
+                        pass
+            print(f"Download error for {video_id}: {e}")
+
+def delete_downloaded_song(video_id):
+    global ytm_cache_path
+    try:
+        if not ytm_cache_path:
+            return json.dumps({"success": False, "error": "Not initialized"})
+        dl_dir = os.path.join(ytm_cache_path, "downloads")
+        m4a_path = os.path.join(dl_dir, f"{video_id}.m4a")
+        meta_path = os.path.join(dl_dir, f"{video_id}.m4a.json")
+        deleted = False
+        for p in (m4a_path, meta_path):
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                    deleted = True
+                except:
+                    pass
+        return json.dumps({"success": True, "deleted": deleted})
     except Exception as e:
-        print(f"Download error: {e}")
+        return json.dumps({"success": False, "error": str(e)})
 
 def redownload_lyrics(video_id, title, artist):
     global ytm_cache_path
     try:
-        import os
-        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
-        safe_artist = "".join(c for c in artist if c.isalnum() or c in (' ', '_', '-')).rstrip()
-        filename = f"{safe_artist} - {safe_title}.mp3"
         dl_dir = os.path.join(ytm_cache_path, "downloads")
-        meta_path = os.path.join(dl_dir, filename + ".json")
+        meta_path = os.path.join(dl_dir, f"{video_id}.m4a.json")
+        if not os.path.exists(meta_path):
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+            safe_artist = "".join(c for c in artist if c.isalnum() or c in (' ', '_', '-')).rstrip()
+            meta_path = os.path.join(dl_dir, f"{safe_artist} - {safe_title}.mp3.json")
         
         if not os.path.exists(meta_path):
             return json.dumps({"success": False, "error": "Song metadata not found"})
@@ -753,13 +795,11 @@ def redownload_lyrics(video_id, title, artist):
                 "synced": l_res.get("synced", False),
                 "lyrics": l_res.get("lyrics", "")
             }
-            # Read existing metadata
-            with open(meta_path, 'r') as f:
+            with open(meta_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             data["lyrics_data"] = lyrics_data
-            # Save metadata
-            with open(meta_path, 'w') as f:
-                json.dump(data, f)
+            with open(meta_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             return json.dumps({"success": True, "lyrics_data": lyrics_data})
         else:
             return json.dumps({"success": False, "error": "Lyrics not found online"})
@@ -817,18 +857,44 @@ def get_trending_searches(country='ZZ'):
 def get_downloaded_songs():
     global ytm_cache_path
     try:
-        import os
+        if not ytm_cache_path:
+            return json.dumps({"success": True, "songs": []})
         dl_dir = os.path.join(ytm_cache_path, "downloads")
         if not os.path.exists(dl_dir):
             return json.dumps({"success": True, "songs": []})
 
-        songs = []
-        for file in os.listdir(dl_dir):
-            if file.endswith(".json"):
-                meta_path = os.path.join(dl_dir, file)
+        # Migration: check for legacy *.mp3.json or *.mp3 files
+        for fname in list(os.listdir(dl_dir)):
+            if fname.endswith(".mp3.json") or (fname.endswith(".json") and not fname.endswith(".m4a.json")):
+                old_meta_path = os.path.join(dl_dir, fname)
                 try:
-                    with open(meta_path, 'r') as f:
+                    with open(old_meta_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                    vid = data.get("id")
+                    if vid:
+                        new_audio = os.path.join(dl_dir, f"{vid}.m4a")
+                        new_meta = os.path.join(dl_dir, f"{vid}.m4a.json")
+                        old_audio = old_meta_path[:-5]
+                        if os.path.exists(old_audio) and not os.path.exists(new_audio):
+                            os.replace(old_audio, new_audio)
+                        data["path"] = new_audio
+                        with open(new_meta, 'w', encoding='utf-8') as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                        if old_meta_path != new_meta and os.path.exists(old_meta_path):
+                            os.remove(old_meta_path)
+                except:
+                    pass
+
+        songs = []
+        for fname in os.listdir(dl_dir):
+            if fname.endswith(".m4a.json"):
+                meta_path = os.path.join(dl_dir, fname)
+                try:
+                    with open(meta_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    audio_path = os.path.join(dl_dir, fname.replace(".json", ""))
+                    if os.path.exists(audio_path):
+                        data["path"] = audio_path
                         songs.append(data)
                 except:
                     pass
@@ -853,6 +919,7 @@ WHITELIST = {
     'add_history': add_history,
     'get_liked_songs': get_liked_songs,
     'download_song': download_song,
+    'delete_downloaded_song': delete_downloaded_song,
     'redownload_lyrics': redownload_lyrics,
     'get_search_suggestions': get_search_suggestions,
     'get_trending_searches': get_trending_searches,

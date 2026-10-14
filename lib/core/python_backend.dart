@@ -145,4 +145,8 @@ class PythonBackend {
   static Future<Map<String, dynamic>> getDownloadedSongs() async {
     return _call('get_downloaded_songs', {});
   }
+
+  static Future<Map<String, dynamic>> deleteDownloadedSong(String videoId) async {
+    return _call('delete_downloaded_song', {'video_id': videoId});
+  }
 }
