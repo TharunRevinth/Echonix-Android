@@ -565,6 +565,8 @@ def rate_song(video_id, rating):
     global ytm
     if not ytm:
         return json.dumps({"success": False, "error": "YTMusic not initialized"})
+    if rating not in ('LIKE', 'DISLIKE', 'INDIFFERENT'):
+        return json.dumps({"success": False, "error": f"Invalid rating '{rating}'. Must be LIKE, DISLIKE, or INDIFFERENT."})
     try:
         ytm.rate_song(video_id, rating)
         return json.dumps({"success": True})

@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 import 'package:client/core/providers/current_song_notifier.dart';
-import 'package:client/core/providers/current_user_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/python_backend.dart';
-import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/view/pages/queue_page.dart';
 import 'package:just_audio/just_audio.dart';
@@ -16,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/dominant_color_provider.dart';
+import 'package:client/features/home/viewmodel/likes_notifier.dart';
 import 'package:hive/hive.dart';
 
 class MusicPlayer extends ConsumerStatefulWidget {
@@ -288,9 +287,10 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
   Widget build(BuildContext context) {
     final currentSong = ref.watch(currentSongNotifierProvider);
     final songNotifier = ref.read(currentSongNotifierProvider.notifier);
-    final userFavorites = ref.watch(
-      currentUserNotifierProvider.select((d) => d?.favorites ?? []),
-    );
+    final isLiked = currentSong != null &&
+        ref.watch(
+          likedSongIdsProvider.select((ids) => ids.contains(currentSong.id)),
+        );
 
     ref.listen<SongModel?>(currentSongNotifierProvider, (previous, next) {
       if (next != null) {
@@ -423,20 +423,17 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 250),
                               child: IconButton(
-                                key: ValueKey(userFavorites
-                                    .any((f) => f.song_id == currentSong.id)),
-                                onPressed: () async {
-                                  await ref
-                                      .read(homeViewModelProvider.notifier)
-                                      .favSong(songId: currentSong.id);
+                                key: ValueKey(isLiked),
+                                onPressed: () {
+                                  ref
+                                      .read(likedSongIdsProvider.notifier)
+                                      .toggle(currentSong);
                                 },
                                 icon: Icon(
-                                  userFavorites.any(
-                                          (f) => f.song_id == currentSong.id)
+                                  isLiked
                                       ? CupertinoIcons.heart_fill
                                       : CupertinoIcons.heart,
-                                  color: userFavorites.any(
-                                          (f) => f.song_id == currentSong.id)
+                                  color: isLiked
                                       ? Colors.redAccent
                                       : Colors.white,
                                   size: 28,

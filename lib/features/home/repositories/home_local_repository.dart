@@ -23,6 +23,7 @@ class HomeLocalRepository {
     'palette_cache',
     'lyrics_cache',
     'liked_ids',
+    'liked_songs_metadata',
     'sync_outbox',
   };
 

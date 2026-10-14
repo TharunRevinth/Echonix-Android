@@ -10,8 +10,8 @@ import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/features/home/view/pages/upload_song_page.dart';
 import 'package:client/features/home/view/pages/playlist_details_page.dart';
 import 'package:client/features/home/view/pages/home_page.dart';
-import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:client/features/home/viewmodel/local_playlists_notifier.dart';
+import 'package:client/features/home/viewmodel/likes_notifier.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -216,7 +216,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Widget _buildFavorites() {
-    return ref.watch(getFavSongsProvider).when(
+    final likedSongIds = ref.watch(likedSongIdsProvider);
+    return ref.watch(favoriteSongsProvider).when(
           data: (data) {
             return ListView.builder(
               padding: const EdgeInsets.only(bottom: 110),
@@ -249,6 +250,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 }
 
                 final song = data[index];
+                final isLiked = likedSongIds.contains(song.id);
                 return ListTile(
                   onTap: () {
                     ref.read(currentSongNotifierProvider.notifier).updatePlaylist(data, index);
@@ -274,9 +276,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   trailing: IconButton(
-                    icon: const Icon(CupertinoIcons.heart_fill, color: Colors.redAccent),
+                    icon: Icon(
+                      isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                      color: isLiked ? Colors.redAccent : Colors.white,
+                    ),
                     onPressed: () {
-                      ref.read(homeViewModelProvider.notifier).favSong(songId: song.id);
+                      ref.read(likedSongIdsProvider.notifier).toggle(song);
                     },
                   ),
                 );

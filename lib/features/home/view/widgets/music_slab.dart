@@ -1,10 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
-import 'package:client/core/providers/current_user_notifier.dart';
 import 'package:client/core/providers/dominant_color_provider.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/features/home/view/widgets/music_player.dart';
-import 'package:client/features/home/viewmodel/home_viewmodel.dart';
+import 'package:client/features/home/viewmodel/likes_notifier.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,9 +15,7 @@ class MusicSlab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSong = ref.watch(currentSongNotifierProvider);
     final songNotifier = ref.read(currentSongNotifierProvider.notifier);
-    final userFavorites = ref.watch(
-      currentUserNotifierProvider.select((data) => data?.favorites ?? []),
-    );
+    final isLiked = ref.watch(likedSongIdsProvider.select((ids) => ids.contains(currentSong?.id)));
 
     if (currentSong == null) {
       return const SizedBox();
@@ -134,16 +131,14 @@ class MusicSlab extends ConsumerWidget {
                       IconButton(
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () async {
-                          await ref.read(homeViewModelProvider.notifier).favSong(
-                                songId: currentSong.id,
-                              );
+                        onPressed: () {
+                          ref.read(likedSongIdsProvider.notifier).toggle(currentSong);
                         },
                         icon: Icon(
-                          userFavorites.any((fav) => fav.song_id == currentSong.id)
+                          isLiked
                               ? CupertinoIcons.heart_fill
                               : CupertinoIcons.heart,
-                          color: userFavorites.any((fav) => fav.song_id == currentSong.id)
+                          color: isLiked
                               ? Colors.redAccent
                               : Colors.white,
                           size: 24,
