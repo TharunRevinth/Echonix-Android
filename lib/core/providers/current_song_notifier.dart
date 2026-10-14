@@ -318,6 +318,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   int currentSongIndex = -1;
   int _playRequestId = 0;
   bool _isServerStarted = false;
+  bool _hasCountedForCurrentSong = false;
 
   ConcatenatingAudioSource? _playlistSource;
   LocalRedirectServer? _redirectServer;
@@ -398,9 +399,6 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     // Listen to play/pause state
     audioPlayer!.playingStream.listen((playing) {
       isPlaying = playing;
-      if (state != null) {
-        state = state!.copyWith(hex_code: state!.hex_code);
-      }
     });
 
     audioPlayer!.currentIndexStream.listen((index) {
@@ -408,18 +406,39 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         final song = playlist[index];
         currentSongIndex = index;
         state = song;
+        _hasCountedForCurrentSong = false;
 
         _homeLocalRepository.uploadLocalSong(song);
         _homeLocalRepository.recordRecentlyPlayed(song);
-        _homeLocalRepository.recordPlaybackHistory(song);
-        PythonBackend.addHistory(song.id);
         ref.invalidate(recentlyPlayedProvider);
-        ref.invalidate(listeningHistoryProvider);
 
         final nextIndex = index + 1;
         if (nextIndex < playlist.length) {
           _redirectServer?.prefetch(playlist[nextIndex].id);
         }
+      }
+    });
+
+    // Position-based tracker: min(30s, 50% duration)
+    audioPlayer!.positionStream.listen((position) {
+      if (_hasCountedForCurrentSong || state == null) return;
+
+      final duration = audioPlayer?.duration;
+      Duration threshold = const Duration(seconds: 30);
+      if (duration != null && duration > Duration.zero) {
+        final halfDuration = Duration(milliseconds: duration.inMilliseconds ~/ 2);
+        if (halfDuration < threshold) {
+          threshold = halfDuration;
+        }
+      }
+
+      if (position >= threshold) {
+        _hasCountedForCurrentSong = true;
+        final song = state!;
+        _homeLocalRepository.incrementPlayCount(song.id);
+        _homeLocalRepository.recordPlaybackHistory(song);
+        PythonBackend.addHistory(song.id);
+        ref.invalidate(listeningHistoryProvider);
       }
     });
 
@@ -431,10 +450,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
       if (processingState == ProcessingState.completed) {
         isPlaying = false;
-        if (state != null) {
-          state = state!.copyWith(hex_code: state!.hex_code);
-          _homeLocalRepository.incrementPlayCount(state!.id);
-        }
+        _hasCountedForCurrentSong = false;
       }
     });
   }
@@ -517,11 +533,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       currentSongIndex = index;
       final song = playlist[index];
       state = song;
+      _hasCountedForCurrentSong = false;
 
+      _homeLocalRepository.uploadLocalSong(song);
       _homeLocalRepository.recordRecentlyPlayed(song);
-      _homeLocalRepository.recordPlaybackHistory(song);
       ref.invalidate(recentlyPlayedProvider);
-      ref.invalidate(listeningHistoryProvider);
 
       final nextIndex = index + 1;
       if (nextIndex < playlist.length) {

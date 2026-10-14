@@ -25,10 +25,33 @@ class HomeLocalRepository {
     'liked_ids',
     'liked_songs_metadata',
     'sync_outbox',
+    'song_cache_index',
+    'custom_playlists_v2',
   };
 
   void uploadLocalSong(SongModel song) {
     box.put(song.id, song.toJson());
+
+    final rawIndex = box.get('song_cache_index');
+    List<String> index;
+    if (rawIndex is List) {
+      index = List<String>.from(rawIndex);
+    } else {
+      index = box.keys
+          .whereType<String>()
+          .where((k) => !_specialKeys.contains(k))
+          .toList();
+    }
+
+    index.remove(song.id);
+    index.add(song.id);
+
+    while (index.length > 500) {
+      final oldestId = index.removeAt(0);
+      box.delete(oldestId);
+    }
+
+    box.put('song_cache_index', index);
   }
 
   List<SongModel> loadSongs() {
