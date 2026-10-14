@@ -11,6 +11,7 @@ class SongModel {
   final int? duration_seconds;
   final String? album;
   final String? setVideoId;
+  final bool isAutoplay;
 
   SongModel({
     required this.id,
@@ -22,6 +23,7 @@ class SongModel {
     this.duration_seconds,
     this.album,
     this.setVideoId,
+    this.isAutoplay = false,
   });
 
   SongModel copyWith({
@@ -34,6 +36,7 @@ class SongModel {
     int? duration_seconds,
     String? album,
     String? setVideoId,
+    bool? isAutoplay,
   }) {
     return SongModel(
       id: id ?? this.id,
@@ -45,6 +48,7 @@ class SongModel {
       duration_seconds: duration_seconds ?? this.duration_seconds,
       album: album ?? this.album,
       setVideoId: setVideoId ?? this.setVideoId,
+      isAutoplay: isAutoplay ?? this.isAutoplay,
     );
   }
 
@@ -59,6 +63,7 @@ class SongModel {
       if (duration_seconds != null) 'duration_seconds': duration_seconds,
       if (album != null) 'album': album,
       if (setVideoId != null) 'setVideoId': setVideoId,
+      'isAutoplay': isAutoplay,
     };
   }
 
@@ -75,6 +80,7 @@ class SongModel {
           : null,
       album: map['album']?.toString(),
       setVideoId: (map['setVideoId'] ?? map['set_video_id'])?.toString(),
+      isAutoplay: map['isAutoplay'] == true,
     );
   }
 

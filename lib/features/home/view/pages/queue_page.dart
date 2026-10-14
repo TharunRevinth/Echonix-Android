@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
+import 'package:client/features/home/models/song_model.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/utils.dart';
 import 'package:flutter/cupertino.dart';
@@ -20,7 +21,11 @@ class QueuePage extends ConsumerWidget {
     // Up next list (songs after the currently playing song)
     final upcomingSongs = currentIndex >= 0 && currentIndex < playlist.length - 1
         ? playlist.sublist(currentIndex + 1)
-        : [];
+        : <SongModel>[];
+
+    final upcomingUserSongs = upcomingSongs.where((s) => !s.isAutoplay).toList();
+    final upcomingAutoplaySongs = upcomingSongs.where((s) => s.isAutoplay).toList();
+    final autoplayEnabled = ref.watch(autoplayEnabledProvider);
 
     // History queue list (songs played before)
     final historySongs = currentIndex > 0 ? playlist.sublist(0, currentIndex) : [];
@@ -104,8 +109,8 @@ class QueuePage extends ConsumerWidget {
                     ),
                   ],
 
-                  // Up Next Section (Drag & Drop Reorderable)
-                  if (upcomingSongs.isNotEmpty) ...[
+                  // User-queued Next In Queue Section
+                  if (upcomingUserSongs.isNotEmpty) ...[
                     const SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.only(left: 16.0, right: 16.0, top: 24.0, bottom: 8.0),
@@ -116,22 +121,141 @@ class QueuePage extends ConsumerWidget {
                       ),
                     ),
                     SliverReorderableList(
-                      itemCount: upcomingSongs.length,
+                      itemCount: upcomingUserSongs.length,
                       onReorder: (oldIdx, newIdx) {
-                        // The indices are relative to upcomingSongs, so map them to full playlist
-                        final actualOldIndex = currentIndex + 1 + oldIdx;
-                        final actualNewIndex = currentIndex + 1 + newIdx;
-                        notifier.reorderQueue(actualOldIndex, actualNewIndex);
+                        final songToMove = upcomingUserSongs[oldIdx];
+                        final actualOldIndex = playlist.indexOf(songToMove);
+                        final targetSong = newIdx < upcomingUserSongs.length
+                            ? upcomingUserSongs[newIdx]
+                            : null;
+                        final actualNewIndex = targetSong != null
+                            ? playlist.indexOf(targetSong)
+                            : playlist.length;
+                        if (actualOldIndex != -1 && actualNewIndex != -1) {
+                          notifier.reorderQueue(actualOldIndex, actualNewIndex);
+                        }
                       },
                       itemBuilder: (context, index) {
-                        final song = upcomingSongs[index];
-                        final actualIndex = currentIndex + 1 + index;
+                        final song = upcomingUserSongs[index];
+                        final actualIndex = playlist.indexOf(song);
 
                         return ReorderableDelayedDragStartListener(
-                          key: ValueKey(song.id + index.toString()),
+                          key: ValueKey('user-${song.id}-$actualIndex'),
                           index: index,
                           child: Dismissible(
-                            key: ValueKey('dismiss-${song.id}-$actualIndex'),
+                            key: ValueKey('dismiss-user-${song.id}-$actualIndex'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20.0),
+                              color: Colors.redAccent.withOpacity(0.8),
+                              child: const Icon(Icons.delete_outline, color: Colors.white),
+                            ),
+                            onDismissed: (direction) {
+                              notifier.removeSongFromQueue(actualIndex);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Removed "${song.song_name}" from queue')),
+                              );
+                            },
+                            child: ListTile(
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: CachedNetworkImage(
+                                  imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+                                  width: 48,
+                                  height: 48,
+                                  memCacheWidth: 96,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (context, url, error) =>
+                                      const Icon(Icons.music_note, color: Colors.white),
+                                ),
+                              ),
+                              title: Text(
+                                song.song_name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                              ),
+                              subtitle: Text(
+                                song.artist +
+                                    (song.duration_seconds != null && song.duration_seconds! > 0
+                                        ? ' • ${_formatQueueDuration(song.duration_seconds!)}'
+                                        : ''),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              trailing: const Icon(Icons.drag_handle_rounded, color: Colors.white30),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+
+                  // Autoplay Header & Toggle Section
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 24.0, bottom: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.all_inclusive, color: Colors.blueAccent, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Autoplay',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                          Transform.scale(
+                            scale: 0.85,
+                            child: Switch.adaptive(
+                              value: autoplayEnabled,
+                              onChanged: (val) {
+                                ref.read(autoplayEnabledProvider.notifier).setEnabled(val);
+                                if (!val) {
+                                  notifier.removeAutoplayTracks();
+                                } else {
+                                  notifier.checkAutoplay();
+                                }
+                              },
+                              activeColor: Colors.blueAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Autoplay Tracks List
+                  if (autoplayEnabled && upcomingAutoplaySongs.isNotEmpty) ...[
+                    SliverReorderableList(
+                      itemCount: upcomingAutoplaySongs.length,
+                      onReorder: (oldIdx, newIdx) {
+                        final songToMove = upcomingAutoplaySongs[oldIdx];
+                        final actualOldIndex = playlist.indexOf(songToMove);
+                        final targetSong = newIdx < upcomingAutoplaySongs.length
+                            ? upcomingAutoplaySongs[newIdx]
+                            : null;
+                        final actualNewIndex = targetSong != null
+                            ? playlist.indexOf(targetSong)
+                            : playlist.length;
+                        if (actualOldIndex != -1 && actualNewIndex != -1) {
+                          notifier.reorderQueue(actualOldIndex, actualNewIndex);
+                        }
+                      },
+                      itemBuilder: (context, index) {
+                        final song = upcomingAutoplaySongs[index];
+                        final actualIndex = playlist.indexOf(song);
+
+                        return ReorderableDelayedDragStartListener(
+                          key: ValueKey('auto-${song.id}-$actualIndex'),
+                          index: index,
+                          child: Dismissible(
+                            key: ValueKey('dismiss-auto-${song.id}-$actualIndex'),
                             direction: DismissDirection.endToStart,
                             background: Container(
                               alignment: Alignment.centerRight,

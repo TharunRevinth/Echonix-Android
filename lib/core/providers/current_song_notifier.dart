@@ -8,6 +8,8 @@ import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/core/sync/sync_service.dart';
 import 'package:client/core/recommendation/listening_signals.dart';
+import 'package:client/core/recommendation/ranking.dart';
+import 'package:client/features/home/viewmodel/likes_notifier.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:just_audio/just_audio.dart';
@@ -21,6 +23,33 @@ final shuffleProvider = StateProvider<bool>((ref) => false);
 final repeatModeProvider = StateProvider<LoopMode>((ref) => LoopMode.off);
 final isPlayerLoadingProvider = StateProvider<bool>((ref) => false);
 final queueVersionProvider = StateProvider<int>((ref) => 0);
+
+class AutoplayNotifier extends StateNotifier<bool> {
+  AutoplayNotifier() : super(true) {
+    _load();
+  }
+
+  void _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool('autoplay_enabled') ?? true;
+  }
+
+  void toggle() async {
+    state = !state;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('autoplay_enabled', state);
+  }
+
+  void setEnabled(bool enabled) async {
+    state = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('autoplay_enabled', enabled);
+  }
+}
+
+final autoplayEnabledProvider = StateNotifierProvider<AutoplayNotifier, bool>((ref) {
+  return AutoplayNotifier();
+});
 
 class _StreamCacheEntry {
   final String url;
@@ -332,7 +361,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     if (_activeSignalTrack == null) return;
     final track = _activeSignalTrack!;
     final now = DateTime.now().millisecondsSinceEpoch;
-    final durationMs = audioPlayer?.duration?.inMilliseconds ?? (track.duration_seconds * 1000);
+    final durationMs = audioPlayer?.duration?.inMilliseconds ?? ((track.duration_seconds ?? 0) * 1000);
     final playedMs = _maxPositionMs;
 
     final isCompleted = completed || (durationMs > 0 && playedMs >= (durationMs * 0.95).toInt());
@@ -365,6 +394,90 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     _activeSignalTrack = song;
     _activeSignalStartedAt = DateTime.now().millisecondsSinceEpoch;
     _maxPositionMs = 0;
+  }
+
+  bool _isFetchingAutoplay = false;
+  String? _lastAutoplayTrackId;
+
+  Future<void> checkAutoplay() async {
+    if (_isFetchingAutoplay || state == null) return;
+    final autoplayEnabled = ref.read(autoplayEnabledProvider);
+    if (!autoplayEnabled) return;
+
+    final repeatMode = ref.read(repeatModeProvider);
+    if (repeatMode != LoopMode.off) return;
+
+    final remaining = playlist.length - 1 - currentSongIndex;
+    if (remaining > 2) return;
+
+    final currentTrack = state!;
+    if (_lastAutoplayTrackId == currentTrack.id) return;
+
+    _isFetchingAutoplay = true;
+    _lastAutoplayTrackId = currentTrack.id;
+
+    try {
+      final res = await PythonBackend.getUpNext(currentTrack.id, limit: 25);
+      if (res['success'] == true && res['tracks'] is List) {
+        final List rawTracks = res['tracks'] as List;
+        final candidates = rawTracks
+            .whereType<Map>()
+            .map((t) => SongModel.fromBackend(Map<String, dynamic>.from(t), hexCode: 'B388FF'))
+            .where((s) => s.id.isNotEmpty)
+            .toList();
+
+        final signals = ListeningSignalsRepository.loadSignals();
+        final now = DateTime.now();
+        final likedIds = ref.read(likedSongIdsProvider);
+
+        // Drop tracks already in the queue or played in the last 2 hours
+        final queueIds = playlist.map((s) => s.id).toSet();
+        final twoHoursAgoMs = now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch;
+        final playedLast2hIds = signals
+            .where((s) => s.startedAt >= twoHoursAgoMs)
+            .map((s) => s.videoId)
+            .toSet();
+
+        final filteredCandidates = candidates.where((c) {
+          return !queueIds.contains(c.id) && !playedLast2hIds.contains(c.id);
+        }).toList();
+
+        final ranked = rank(
+          filteredCandidates,
+          signals,
+          now,
+          likedIds: likedIds,
+          currentTrack: currentTrack,
+        );
+
+        final top10 = ranked.take(10).map((s) => s.copyWith(isAutoplay: true)).toList();
+
+        if (top10.isNotEmpty) {
+          for (final song in top10) {
+            playlist.add(song);
+            if (_playlistSource != null) {
+              _playlistSource!.add(_buildAudioSource(song));
+            }
+          }
+          ref.read(queueVersionProvider.notifier).state++;
+          // Resolve first autoplay track URL in advance (prefetch)
+          _redirectServer?.prefetch(top10.first.id);
+        }
+      }
+    } catch (e) {
+      debugPrint('[Echonix][autoplay] checkAutoplay error: $e');
+    } finally {
+      _isFetchingAutoplay = false;
+    }
+  }
+
+  void removeAutoplayTracks() {
+    if (playlist.isEmpty) return;
+    for (int i = playlist.length - 1; i > currentSongIndex; i--) {
+      if (playlist[i].isAutoplay) {
+        removeSongFromQueue(i);
+      }
+    }
   }
 
   ConcatenatingAudioSource? _playlistSource;
@@ -464,6 +577,8 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         if (nextIndex < playlist.length) {
           _redirectServer?.prefetch(playlist[nextIndex].id);
         }
+
+        checkAutoplay();
       }
     });
 
@@ -626,6 +741,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
       await audioPlayer!.play();
       isPlaying = true;
+      checkAutoplay();
     } catch (e, st) {
       debugPrint("Echonix Playback Error: $e\n$st");
     }
@@ -674,25 +790,28 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   }
 
   void addSongToQueue(SongModel song) {
+    final manualSong = song.copyWith(isAutoplay: false);
     if (audioPlayer == null || playlist.isEmpty) {
-      updateSong(song);
+      updateSong(manualSong);
       return;
     }
-    playlist.add(song);
+    playlist.add(manualSong);
     if (_playlistSource != null) {
-      _playlistSource!.add(_buildAudioSource(song));
+      _playlistSource!.add(_buildAudioSource(manualSong));
     }
+    ref.read(queueVersionProvider.notifier).state++;
   }
 
   void playNext(SongModel song) {
+    final manualSong = song.copyWith(isAutoplay: false);
     if (audioPlayer == null || playlist.isEmpty) {
-      updateSong(song);
+      updateSong(manualSong);
       return;
     }
     final insertIndex = currentSongIndex + 1;
-    playlist.insert(insertIndex, song);
+    playlist.insert(insertIndex, manualSong);
     if (_playlistSource != null) {
-      _playlistSource!.insert(insertIndex, _buildAudioSource(song));
+      _playlistSource!.insert(insertIndex, _buildAudioSource(manualSong));
     }
     ref.read(queueVersionProvider.notifier).state++;
   }
@@ -736,6 +855,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       currentSongIndex--;
     }
     ref.read(queueVersionProvider.notifier).state++;
+    checkAutoplay();
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
