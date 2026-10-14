@@ -6,20 +6,6 @@ part of 'home_viewmodel.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$getAllSongsHash() => r'a06f06bef1b9213d7a6fb1458e5a4d32f0c45f7e';
-
-/// See also [getAllSongs].
-@ProviderFor(getAllSongs)
-final getAllSongsProvider = AutoDisposeFutureProvider<List<SongModel>>.internal(
-  getAllSongs,
-  name: r'getAllSongsProvider',
-  debugGetCreateSourceHash:
-      const bool.fromEnvironment('dart.vm.product') ? null : _$getAllSongsHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
-
-typedef GetAllSongsRef = AutoDisposeFutureProviderRef<List<SongModel>>;
 String _$isYTMConnectedHash() => r'c5b858b8818037acdf4a42bae9c095a352e4076b';
 
 /// See also [isYTMConnected].
@@ -50,13 +36,13 @@ final getFavSongsProvider = AutoDisposeFutureProvider<List<SongModel>>.internal(
 
 typedef GetFavSongsRef = AutoDisposeFutureProviderRef<List<SongModel>>;
 String _$getHomeFeedSectionsHash() =>
-    r'952da6b0ab87ef2a9ddea6b5c193f9860b85dec3';
+    r'd058731d2e2ae8b18762a0abeaf64eddd4340836';
 
-/// See also [getHomeFeedSections].
-@ProviderFor(getHomeFeedSections)
-final getHomeFeedSectionsProvider =
-    AutoDisposeFutureProvider<List<Map<String, dynamic>>>.internal(
-  getHomeFeedSections,
+/// See also [GetHomeFeedSections].
+@ProviderFor(GetHomeFeedSections)
+final getHomeFeedSectionsProvider = AutoDisposeAsyncNotifierProvider<
+    GetHomeFeedSections, List<Map<String, dynamic>>>.internal(
+  GetHomeFeedSections.new,
   name: r'getHomeFeedSectionsProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
@@ -65,8 +51,8 @@ final getHomeFeedSectionsProvider =
   allTransitiveDependencies: null,
 );
 
-typedef GetHomeFeedSectionsRef
-    = AutoDisposeFutureProviderRef<List<Map<String, dynamic>>>;
+typedef _$GetHomeFeedSections
+    = AutoDisposeAsyncNotifier<List<Map<String, dynamic>>>;
 String _$homeViewModelHash() => r'6cf05ce57d5841404e742daaf6425c79a0258148';
 
 /// See also [HomeViewModel].

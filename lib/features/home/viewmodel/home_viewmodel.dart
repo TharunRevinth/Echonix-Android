@@ -11,21 +11,10 @@ import 'package:client/core/python_backend.dart';
 import 'package:client/core/providers/bootstrap_provider.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 part 'home_viewmodel.g.dart';
 
-@riverpod
-Future<List<SongModel>> getAllSongs(GetAllSongsRef ref) async {
-  final token =
-      ref.watch(currentUserNotifierProvider.select((user) => user!.token));
-  final res = await ref.watch(homeRepositoryProvider).getAllSongs(
-        token: token,
-      );
-
-  return switch (res) {
-    Left(value: final l) => throw l.message,
-    Right(value: final r) => r,
-  };
-}
+final isHomeFeedStaleProvider = StateProvider<bool>((ref) => false);
 
 @riverpod
 Future<bool> isYTMConnected(IsYTMConnectedRef ref) async {
@@ -49,36 +38,79 @@ Future<List<SongModel>> getFavSongs(GetFavSongsRef ref) async {
 }
 
 @riverpod
-Future<List<Map<String, dynamic>>> getHomeFeedSections(GetHomeFeedSectionsRef ref) async {
-  await ref.watch(bootstrapProvider.future);
-  final res = await PythonBackend.getHomeFeed();
-  if (res['success'] == true) {
-    final List sections = res['sections'] ?? [];
-    if (sections.isNotEmpty) {
-      return List<Map<String, dynamic>>.from(sections);
+class GetHomeFeedSections extends _$GetHomeFeedSections {
+  @override
+  FutureOr<List<Map<String, dynamic>>> build() async {
+    final localRepo = ref.watch(homeLocalRepositoryProvider);
+    final cached = localRepo.getCachedHomeFeed();
+    final cachedSections = cached != null && cached['sections'] != null
+        ? (cached['sections'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList()
+        : <Map<String, dynamic>>[];
+    final savedAt = cached != null ? (cached['savedAt'] as num?)?.toInt() ?? 0 : 0;
+    final isOlderThan15Min = DateTime.now().millisecondsSinceEpoch - savedAt > 15 * 60 * 1000;
+
+    if (cachedSections.isNotEmpty) {
+      if (isOlderThan15Min) {
+        Future.microtask(() => refresh());
+      }
+      return cachedSections;
+    }
+
+    return _fetchFromNetwork();
+  }
+
+  Future<void> refresh() async {
+    try {
+      final fresh = await _fetchFromNetwork();
+      state = AsyncData(fresh);
+      ref.read(isHomeFeedStaleProvider.notifier).state = false;
+    } catch (e) {
+      if (state.hasValue && state.value!.isNotEmpty) {
+        ref.read(isHomeFeedStaleProvider.notifier).state = true;
+      } else {
+        state = AsyncError(e, StackTrace.current);
+      }
     }
   }
 
-  // Fallback: search for trending hits
-  final fallbackRes = await PythonBackend.searchSongs("trending hits");
-  if (fallbackRes['success'] == true) {
-    final List songsData = fallbackRes['songs'] ?? [];
-    final List parsedContents = songsData.map((s) => {
-      'title': s['title'] ?? '',
-      'thumbnail': s['thumbnail'] ?? '',
-      'artists': s['artist'] ?? '',
-      'id': s['id'] ?? '',
-      'type': 'song',
-    }).toList();
-    return [
-      {
-        'title': 'Trending Hits',
-        'isSongSection': true,
-        'contents': parsedContents,
+  Future<List<Map<String, dynamic>>> _fetchFromNetwork() async {
+    await ref.watch(bootstrapProvider.future);
+    final res = await PythonBackend.getHomeFeed();
+    if (res['success'] == true) {
+      final List sections = res['sections'] ?? [];
+      if (sections.isNotEmpty) {
+        final list = List<Map<String, dynamic>>.from(
+          sections.map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+        ref.read(homeLocalRepositoryProvider).setCachedHomeFeed(list);
+        return list;
       }
-    ];
+    }
+
+    // Fallback: search for trending hits
+    final fallbackRes = await PythonBackend.searchSongs("trending hits");
+    if (fallbackRes['success'] == true) {
+      final List songsData = fallbackRes['songs'] ?? [];
+      final List parsedContents = songsData.map((s) => {
+        'title': s['title'] ?? '',
+        'thumbnail': s['thumbnail'] ?? '',
+        'artists': s['artist'] ?? '',
+        'id': s['id'] ?? '',
+        'type': 'song',
+      }).toList();
+      final list = [
+        {
+          'title': 'Trending Hits',
+          'isSongSection': true,
+          'contents': parsedContents,
+        }
+      ];
+      ref.read(homeLocalRepositoryProvider).setCachedHomeFeed(list);
+      return list;
+    }
+
+    throw Exception(res['error'] ?? 'Failed to load home feed');
   }
-  return [];
 }
 
 @riverpod

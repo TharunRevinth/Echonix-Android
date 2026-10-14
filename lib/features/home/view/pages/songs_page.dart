@@ -271,8 +271,11 @@ class SongsPage extends ConsumerWidget {
           ),
         ),
         child: SafeArea(
-          child: CustomScrollView(
-          slivers: [
+          child: RefreshIndicator(
+            onRefresh: () => ref.read(getHomeFeedSectionsProvider.notifier).refresh(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
             // Top Bar with ECHONIX Logo and YTMusic connected status / connect button
             SliverToBoxAdapter(
               child: Padding(
@@ -527,6 +530,30 @@ class SongsPage extends ConsumerWidget {
                         },
                       ),
                       const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+
+            if (ref.watch(isHomeFeedStaleProvider))
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.cloud_off_rounded, color: Colors.amber, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Showing cached feed (offline or refresh failed)',
+                        style: TextStyle(color: Colors.amber, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -799,6 +826,7 @@ class SongsPage extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     ),
   );
 }

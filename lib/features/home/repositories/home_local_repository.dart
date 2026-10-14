@@ -18,7 +18,8 @@ class HomeLocalRepository {
     'listening_history',
     'most_played',
     'saved_albums',
-    'saved_artists'
+    'saved_artists',
+    'home_feed_cache',
   };
 
   void uploadLocalSong(SongModel song) {
@@ -173,6 +174,25 @@ class HomeLocalRepository {
   bool isArtistSaved(String artistId) {
     final list = getSavedArtists();
     return list.any((a) => a['id'] == artistId);
+  }
+
+  // 7. Home Feed Cache
+  Map<String, dynamic>? getCachedHomeFeed() {
+    final data = box.get('home_feed_cache');
+    if (data == null) return null;
+    try {
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void setCachedHomeFeed(List<Map<String, dynamic>> sections) {
+    box.put('home_feed_cache', {
+      'savedAt': DateTime.now().millisecondsSinceEpoch,
+      'sections': sections,
+    });
   }
 }
 

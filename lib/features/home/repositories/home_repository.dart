@@ -13,69 +13,6 @@ HomeRepository homeRepository(HomeRepositoryRef ref) {
 }
 
 class HomeRepository {
-  Future<Either<AppFailure, List<SongModel>>> getAllSongs({
-    required String token,
-  }) async {
-    try {
-      final res = await PythonBackend.getHomeFeed();
-      if (res['success'] != true) {
-        final fallbackRes = await PythonBackend.searchSongs("trending hits");
-        if (fallbackRes['success'] == true) {
-          final List songsData = fallbackRes['songs'] ?? [];
-          final songs = songsData.map((s) => SongModel(
-            id: s['id'] ?? '',
-            song_name: s['title'] ?? '',
-            artist: s['artist'] ?? '',
-            thumbnail_url: s['thumbnail'] ?? '',
-            song_url: 'https://www.youtube.com/watch?v=${s['id']}',
-            hex_code: 'B388FF',
-          )).toList();
-          return Right(songs);
-        }
-        return Left(AppFailure(res['error'] ?? 'Failed to get home feed'));
-      }
-
-      final sections = res['sections'] as List? ?? [];
-      final List<SongModel> songs = [];
-      for (final sec in sections) {
-        if (sec['isSongSection'] == true) {
-          final contents = sec['contents'] as List? ?? [];
-          for (final item in contents) {
-            if (item['type'] == 'song') {
-              songs.add(SongModel(
-                id: item['id'] ?? '',
-                song_name: item['title'] ?? '',
-                artist: item['artists'] ?? '',
-                thumbnail_url: item['thumbnail'] ?? '',
-                song_url: 'https://www.youtube.com/watch?v=${item['id']}',
-                hex_code: 'B388FF',
-              ));
-            }
-          }
-        }
-      }
-
-      if (songs.isEmpty) {
-        final fallbackRes = await PythonBackend.searchSongs("trending hits");
-        if (fallbackRes['success'] == true) {
-          final List songsData = fallbackRes['songs'] ?? [];
-          return Right(songsData.map((s) => SongModel(
-            id: s['id'] ?? '',
-            song_name: s['title'] ?? '',
-            artist: s['artist'] ?? '',
-            thumbnail_url: s['thumbnail'] ?? '',
-            song_url: 'https://www.youtube.com/watch?v=${s['id']}',
-            hex_code: 'B388FF',
-          )).toList());
-        }
-      }
-
-      return Right(songs);
-    } catch (e) {
-      return Left(AppFailure(e.toString()));
-    }
-  }
-
   Future<Either<AppFailure, List<SongModel>>> searchSongs(String query) async {
     try {
       final res = await PythonBackend.searchSongs(query);
