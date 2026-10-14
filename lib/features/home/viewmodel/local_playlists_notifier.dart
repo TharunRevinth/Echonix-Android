@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:client/core/python_backend.dart';
+import 'package:client/core/sync/sync_service.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
@@ -108,7 +110,9 @@ class CustomPlaylist {
 }
 
 class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
-  LocalPlaylistsNotifier() : super([]) {
+  final Ref? ref;
+
+  LocalPlaylistsNotifier([this.ref]) : super([]) {
     _loadPlaylists();
   }
 
@@ -152,7 +156,12 @@ class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
     box.put('custom_playlists_v2', state.map((p) => p.toMap()).toList());
   }
 
-  Future<String> createPlaylist(String name, {String? description, String? remoteId}) async {
+  Future<String> createPlaylist(
+    String name, {
+    String? description,
+    String? remoteId,
+    bool syncEnabled = true,
+  }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) return '';
     final id = generateUuidV4();
@@ -162,27 +171,56 @@ class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
       name: trimmedName,
       description: description ?? '',
       songs: [],
+      syncEnabled: syncEnabled,
     );
     state = [...state, playlist];
     _savePlaylists();
+
+    if (syncEnabled && remoteId == null && ref != null) {
+      ref!.read(syncServiceProvider.notifier).enqueue('playlist_create', {
+        'localId': id,
+        'title': trimmedName,
+        'description': description ?? '',
+        'videoIds': <String>[],
+      });
+    }
+
     return id;
   }
 
   Future<void> deletePlaylist(String idOrName) async {
+    final target = state.where((p) => p.id == idOrName || p.name == idOrName).firstOrNull;
     state = state.where((p) => p.id != idOrName && p.name != idOrName).toList();
     _savePlaylists();
+
+    if (target != null && target.syncEnabled && target.remoteId != null && ref != null) {
+      ref!.read(syncServiceProvider.notifier).enqueue('playlist_delete', {
+        'playlistId': target.remoteId,
+        'localId': target.id,
+      });
+    }
   }
 
   Future<void> renamePlaylist(String idOrName, String newName) async {
     final trimmed = newName.trim();
     if (trimmed.isEmpty) return;
+    CustomPlaylist? target;
     state = state.map((p) {
       if (p.id == idOrName || p.name == idOrName) {
-        return p.copyWith(name: trimmed);
+        target = p.copyWith(name: trimmed);
+        return target!;
       }
       return p;
     }).toList();
     _savePlaylists();
+
+    if (target != null && target!.syncEnabled && target!.remoteId != null && ref != null) {
+      ref!.read(syncServiceProvider.notifier).enqueue('playlist_rename', {
+        'playlistId': target!.remoteId,
+        'localId': target!.id,
+        'title': trimmed,
+      });
+    }
   }
 
   Future<void> updatePlaylistDetails(
@@ -230,28 +268,78 @@ class LocalPlaylistsNotifier extends StateNotifier<List<CustomPlaylist>> {
   }
 
   Future<void> addSongToPlaylist(String idOrName, SongModel song) async {
+    CustomPlaylist? target;
     state = state.map((p) {
       if (p.id == idOrName || p.name == idOrName) {
         if (p.songs.any((s) => s.id == song.id)) return p;
-        return p.copyWith(songs: [...p.songs, song]);
+        target = p.copyWith(songs: [...p.songs, song]);
+        return target!;
       }
       return p;
     }).toList();
     _savePlaylists();
+
+    if (target != null && target!.syncEnabled && target!.remoteId != null && ref != null) {
+      ref!.read(syncServiceProvider.notifier).enqueue('playlist_add', {
+        'playlistId': target!.remoteId,
+        'localId': target!.id,
+        'videoIds': [song.id],
+      });
+    }
   }
 
   Future<void> removeSongFromPlaylist(String idOrName, String songId) async {
+    CustomPlaylist? target;
+    SongModel? removedSong;
     state = state.map((p) {
       if (p.id == idOrName || p.name == idOrName) {
-        return p.copyWith(songs: p.songs.where((s) => s.id != songId).toList());
+        removedSong = p.songs.where((s) => s.id == songId).firstOrNull;
+        target = p.copyWith(songs: p.songs.where((s) => s.id != songId).toList());
+        return target!;
       }
       return p;
     }).toList();
     _savePlaylists();
+
+    if (target != null && target!.syncEnabled && target!.remoteId != null && ref != null) {
+      ref!.read(syncServiceProvider.notifier).enqueue('playlist_remove', {
+        'playlistId': target!.remoteId,
+        'localId': target!.id,
+        'items': [
+          {
+            'videoId': songId,
+            'setVideoId': removedSong?.setVideoId ?? '',
+          }
+        ],
+      });
+    }
+  }
+
+  Future<void> fetchRemoteTracksIfEmpty(String idOrName) async {
+    final playlist = state.where((p) => p.id == idOrName || p.name == idOrName).firstOrNull;
+    if (playlist == null || playlist.remoteId == null || playlist.songs.isNotEmpty) return;
+    try {
+      final res = await PythonBackend.getPlaylistDetails(playlist.remoteId!);
+      if (res['success'] == true && res['tracks'] is List) {
+        final List tracks = res['tracks'] as List;
+        final songs = tracks
+            .whereType<Map>()
+            .map((t) => SongModel.fromBackend(Map<String, dynamic>.from(t), hexCode: 'B388FF'))
+            .where((s) => s.id.isNotEmpty)
+            .toList();
+        state = state.map((p) {
+          if (p.id == playlist.id) {
+            return p.copyWith(songs: songs);
+          }
+          return p;
+        }).toList();
+        _savePlaylists();
+      }
+    } catch (_) {}
   }
 }
 
 final localPlaylistsProvider =
     StateNotifierProvider<LocalPlaylistsNotifier, List<CustomPlaylist>>((ref) {
-  return LocalPlaylistsNotifier();
+  return LocalPlaylistsNotifier(ref);
 });

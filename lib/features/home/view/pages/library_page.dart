@@ -442,7 +442,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           if (playlistName.isNotEmpty) {
             groupedPlaylists.putIfAbsent(playlistName, () => []).add(song);
           } else {
-            individualSongsRaw.add(Map<String, dynamic>.from(s as Map));
+            individualSongsRaw.add(Map<String, dynamic>.from(s));
           }
         }
 
@@ -832,6 +832,14 @@ class CustomPlaylistDetailsPage extends ConsumerStatefulWidget {
 }
 
 class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetailsPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(localPlaylistsProvider.notifier).fetchRemoteTracksIfEmpty(widget.playlistId ?? widget.playlistName);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final playlists = ref.watch(localPlaylistsProvider);
