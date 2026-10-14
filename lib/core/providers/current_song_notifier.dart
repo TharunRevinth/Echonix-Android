@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/core/python_backend.dart';
+import 'package:client/core/sync/sync_service.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:just_audio/just_audio.dart';
@@ -440,7 +441,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         final song = state!;
         _homeLocalRepository.incrementPlayCount(song.id);
         _homeLocalRepository.recordPlaybackHistory(song);
-        PythonBackend.addHistory(song.id);
+        ref.read(syncServiceProvider.notifier).enqueue('history', {'videoId': song.id});
         ref.invalidate(listeningHistoryProvider);
       }
     });

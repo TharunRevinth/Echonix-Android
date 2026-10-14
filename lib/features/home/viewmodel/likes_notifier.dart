@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 import 'package:client/core/python_backend.dart';
+import 'package:client/core/sync/sync_service.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 
@@ -41,8 +42,8 @@ class LikesNotifier extends StateNotifier<Set<String>> {
       _box.put('liked_ids', nextState.toList());
       _box.put('liked_songs_metadata', metadataMap);
 
-      // Send INDIFFERENT (un-like)
-      PythonBackend.rateSong(id, 'INDIFFERENT');
+      // Enqueue INDIFFERENT (un-like)
+      ref.read(syncServiceProvider.notifier).enqueue('rate', {'videoId': id, 'rating': 'INDIFFERENT'});
     } else {
       nextState.add(id);
       metadataMap[id] = song.toJson();
@@ -51,9 +52,26 @@ class LikesNotifier extends StateNotifier<Set<String>> {
       _box.put('liked_songs_metadata', metadataMap);
       ref.read(homeLocalRepositoryProvider).uploadLocalSong(song);
 
-      // Send LIKE
-      PythonBackend.rateSong(id, 'LIKE');
+      // Enqueue LIKE
+      ref.read(syncServiceProvider.notifier).enqueue('rate', {'videoId': id, 'rating': 'LIKE'});
     }
+  }
+
+  void syncRemoteIds(Set<String> mergedIds, List<SongModel> remoteSongs) {
+    state = mergedIds;
+    final rawMeta = _box.get('liked_songs_metadata');
+    final Map<String, dynamic> metadataMap =
+        rawMeta is Map ? Map<String, dynamic>.from(rawMeta) : {};
+
+    for (final song in remoteSongs) {
+      if (mergedIds.contains(song.id)) {
+        metadataMap[song.id] = song.toJson();
+      }
+    }
+    metadataMap.removeWhere((id, _) => !mergedIds.contains(id));
+
+    _box.put('liked_ids', mergedIds.toList());
+    _box.put('liked_songs_metadata', metadataMap);
   }
 
   void mergeRemoteLikes(List<SongModel> remoteSongs) {

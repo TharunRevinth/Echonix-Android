@@ -1,6 +1,7 @@
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
+import 'package:client/core/sync/sync_service.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,6 +52,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (res['success'] == true) {
       ref.invalidate(isYTMConnectedProvider);
       ref.invalidate(getHomeFeedSectionsProvider);
+      ref.read(syncServiceProvider.notifier).flush();
+      ref.read(syncServiceProvider.notifier).pullIncremental(force: true);
       setState(() {
         _isAuthenticated = true;
         _isConnecting = false;
@@ -63,6 +66,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _message = 'Connection failed: ${res['error'] ?? 'Invalid cookie.'}';
       });
     }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   void _logout() async {
@@ -136,6 +148,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final eqSettings = ref.watch(equalizerProvider);
     final remainingSleep = ref.watch(sleepTimerProvider);
+    final syncState = ref.watch(syncServiceProvider);
 
     // List of active dropdown options combining built-in and user custom presets
     final List<String> dropdownItems = [
@@ -220,6 +233,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
+
+                      if (syncState.reconnectNeeded) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Reconnect needed: Your YouTube Music session has expired or requires re-authentication.',
+                                  style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // 1. YT Music Connection Section
                       Container(
@@ -321,6 +358,106 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 ),
                               ],
                             ],
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Sync & Outbox Section
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.sync, color: Colors.blueAccent, size: 24),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Account & Cloud Sync',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (syncState.isSyncing)
+                                  const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blueAccent),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Last sync: ${syncState.lastSyncTime != null ? _formatDateTime(syncState.lastSyncTime!) : 'Never'}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Pending changes: ${syncState.pendingCount}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            if (syncState.failedCount > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Failed operations: ${syncState.failedCount}',
+                                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: syncState.isSyncing
+                                        ? null
+                                        : () {
+                                            ref.read(syncServiceProvider.notifier).flush();
+                                            ref.read(syncServiceProvider.notifier).pullIncremental(force: true);
+                                          },
+                                    icon: const Icon(Icons.sync, size: 18),
+                                    label: const Text('Sync Now'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: BorderSide(color: Colors.white.withOpacity(0.3)),
+                                    ),
+                                  ),
+                                ),
+                                if (syncState.failedCount > 0) ...[
+                                  const SizedBox(width: 8),
+                                  OutlinedButton(
+                                    onPressed: () => ref.read(syncServiceProvider.notifier).retryFailed(),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.amber,
+                                      side: const BorderSide(color: Colors.amber),
+                                    ),
+                                    child: const Text('Retry'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton(
+                                    onPressed: () => ref.read(syncServiceProvider.notifier).discardFailed(),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.redAccent,
+                                      side: const BorderSide(color: Colors.redAccent),
+                                    ),
+                                    child: const Text('Discard'),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),
