@@ -118,18 +118,10 @@ final favoriteSongsProvider = FutureProvider<List<SongModel>>((ref) async {
       final List<SongModel> remoteSongs = [];
       for (final s in rawSongs) {
         if (s is Map) {
-          final id = s['id'] ?? '';
-          if (id.isEmpty) continue;
-          remoteSongs.add(
-            SongModel(
-              id: id,
-              song_name: s['title'] ?? '',
-              artist: s['artist'] ?? '',
-              thumbnail_url: s['thumbnail'] ?? '',
-              song_url: 'https://www.youtube.com/watch?v=$id',
-              hex_code: 'B388FF',
-            ),
-          );
+          final model = SongModel.fromBackend(Map<String, dynamic>.from(s), hexCode: 'B388FF');
+          if (model.id.isNotEmpty) {
+            remoteSongs.add(model);
+          }
         }
       }
 

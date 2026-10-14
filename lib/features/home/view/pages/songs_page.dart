@@ -636,14 +636,7 @@ class SongsPage extends ConsumerWidget {
                                                       clickedIndex = sectionSongs.length;
                                                     }
                                                     sectionSongs.add(
-                                                      SongModel(
-                                                        id: c['id'] ?? '',
-                                                        song_name: c['title'] ?? '',
-                                                        artist: c['artists'] ?? '',
-                                                        thumbnail_url: c['thumbnail'] ?? '',
-                                                        song_url: 'https://www.youtube.com/watch?v=${c['id']}',
-                                                        hex_code: 'B388FF',
-                                                      ),
+                                                      SongModel.fromBackend(Map<String, dynamic>.from(c), hexCode: 'B388FF'),
                                                     );
                                                   }
                                                 }

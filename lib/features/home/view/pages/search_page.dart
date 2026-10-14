@@ -162,17 +162,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       if (res['success'] == true) {
         final List songsList = res['songs'] ?? [];
         setState(() {
-          _searchResults = songsList.map((s) {
-            return SongModel(
-              id: s['id'] ?? '',
-              song_name: s['title'] ?? '',
-              artist: s['artist'] ?? '',
-              thumbnail_url: s['thumbnail'] ??
-                  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150',
-              song_url: s['youtube_url'] ?? '',
-              hex_code: 'B388FF',
-            );
-          }).toList();
+          _searchResults = songsList
+              .map((s) => SongModel.fromBackend(Map<String, dynamic>.from(s as Map), hexCode: 'B388FF'))
+              .toList();
           _isLoading = false;
         });
       } else {
@@ -560,14 +552,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   contentPadding: EdgeInsets.zero,
                   onTap: () {
                     // Play trending song
-                    final model = SongModel(
-                      id: song['id'] ?? '',
-                      song_name: song['title'] ?? '',
-                      artist: song['artist'] ?? '',
-                      thumbnail_url: song['thumbnail'] ?? '',
-                      song_url: 'https://www.youtube.com/watch?v=${song['id']}',
-                      hex_code: 'B388FF',
-                    );
+                    final model = SongModel.fromBackend(Map<String, dynamic>.from(song), hexCode: 'B388FF');
                     ref.read(currentSongNotifierProvider.notifier).updateSong(model);
                   },
                   leading: ClipRRect(

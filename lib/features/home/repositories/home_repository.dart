@@ -20,14 +20,9 @@ class HomeRepository {
         return Left(AppFailure(res['error'] ?? 'Failed to search songs'));
       }
       final List songsData = res['songs'] ?? [];
-      final songs = songsData.map((s) => SongModel(
-        id: s['id'] ?? '',
-        song_name: s['title'] ?? '',
-        artist: s['artist'] ?? '',
-        thumbnail_url: s['thumbnail'] ?? '',
-        song_url: 'https://www.youtube.com/watch?v=${s['id']}',
-        hex_code: 'B388FF',
-      )).toList();
+      final songs = songsData
+          .map((s) => SongModel.fromBackend(Map<String, dynamic>.from(s as Map), hexCode: 'B388FF'))
+          .toList();
       return Right(songs);
     } catch (e) {
       return Left(AppFailure(e.toString()));
@@ -66,14 +61,9 @@ class HomeRepository {
         return Left(AppFailure(res['error'] ?? 'Failed to get liked songs'));
       }
       final List songsData = res['songs'] ?? [];
-      final songs = songsData.map((s) => SongModel(
-        id: s['id'] ?? '',
-        song_name: s['title'] ?? '',
-        artist: s['artist'] ?? '',
-        thumbnail_url: s['thumbnail'] ?? '',
-        song_url: 'https://www.youtube.com/watch?v=${s['id']}',
-        hex_code: 'B388FF',
-      )).toList();
+      final songs = songsData
+          .map((s) => SongModel.fromBackend(Map<String, dynamic>.from(s as Map), hexCode: 'B388FF'))
+          .toList();
       return Right(songs);
     } catch (e) {
       return Left(AppFailure(e.toString()));

@@ -91,7 +91,10 @@ class QueuePage extends ConsumerWidget {
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(
-                          currentSong.artist,
+                          currentSong.artist +
+                              (currentSong.duration_seconds != null && currentSong.duration_seconds! > 0
+                                  ? ' • ${_formatQueueDuration(currentSong.duration_seconds!)}'
+                                  : ''),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.grey),
@@ -162,7 +165,10 @@ class QueuePage extends ConsumerWidget {
                                 style: const TextStyle(color: Colors.white, fontSize: 14),
                               ),
                               subtitle: Text(
-                                song.artist,
+                                song.artist +
+                                    (song.duration_seconds != null && song.duration_seconds! > 0
+                                        ? ' • ${_formatQueueDuration(song.duration_seconds!)}'
+                                        : ''),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -214,7 +220,10 @@ class QueuePage extends ConsumerWidget {
                               style: const TextStyle(color: Colors.white38, fontSize: 14),
                             ),
                             subtitle: Text(
-                              song.artist,
+                              song.artist +
+                                  (song.duration_seconds != null && song.duration_seconds! > 0
+                                      ? ' • ${_formatQueueDuration(song.duration_seconds!)}'
+                                      : ''),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -229,5 +238,11 @@ class QueuePage extends ConsumerWidget {
               ),
       ),
     );
+  }
+
+  String _formatQueueDuration(int totalSeconds) {
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 }

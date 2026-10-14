@@ -72,16 +72,14 @@ class PlaylistDetailsPage extends ConsumerWidget {
               final List tracksList = res['tracks'] ?? [];
               final List<SongModel> songs = tracksList
                   .map(
-                    (s) => SongModel(
-                      id: s['id'] ?? '',
-                      song_name: s['title'] ?? '',
-                      artist: s['artist'] ?? '',
-                      thumbnail_url: (s['thumbnail'] != null && s['thumbnail'].toString().trim().isNotEmpty)
-                          ? s['thumbnail'].toString().trim()
-                          : thumbnailUrl,
-                      song_url: 'https://www.youtube.com/watch?v=${s['id']}',
-                      hex_code: 'B388FF',
-                    ),
+                    (s) {
+                      final m = Map<String, dynamic>.from(s as Map);
+                      if ((m['thumbnail'] == null || m['thumbnail'].toString().trim().isEmpty) &&
+                          (m['thumbnails'] == null || (m['thumbnails'] as List).isEmpty)) {
+                        m['thumbnail'] = thumbnailUrl;
+                      }
+                      return SongModel.fromBackend(m, hexCode: 'B388FF');
+                    },
                   )
                   .toList();
 

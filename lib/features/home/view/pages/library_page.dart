@@ -438,18 +438,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
         for (final s in songsList) {
           final playlistName = s['playlist_name'] as String? ?? '';
-          final song = SongModel(
-            id: s['id'] ?? '',
-            song_name: s['title'] ?? '',
-            artist: s['artist'] ?? '',
-            thumbnail_url: s['thumbnail_url'] ?? 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150',
-            song_url: s['path'] ?? '',
-            hex_code: 'B388FF',
-          );
+          final song = SongModel.fromBackend(Map<String, dynamic>.from(s as Map), hexCode: 'B388FF');
           if (playlistName.isNotEmpty) {
             groupedPlaylists.putIfAbsent(playlistName, () => []).add(song);
           } else {
-            individualSongsRaw.add(s);
+            individualSongsRaw.add(Map<String, dynamic>.from(s as Map));
           }
         }
 
@@ -512,14 +505,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             } else {
               final songIndex = index - playlistKeys.length;
               final rawSong = individualSongsRaw[songIndex];
-              final song = SongModel(
-                id: rawSong['id'] ?? '',
-                song_name: rawSong['title'] ?? '',
-                artist: rawSong['artist'] ?? '',
-                thumbnail_url: rawSong['thumbnail_url'] ?? '',
-                song_url: rawSong['path'] ?? '',
-                hex_code: 'B388FF',
-              );
+              final song = SongModel.fromBackend(Map<String, dynamic>.from(rawSong), hexCode: 'B388FF');
               final hasLyrics = rawSong['lyrics_data'] != null;
 
               return ListTile(
@@ -582,14 +568,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   ],
                 ),
                 onTap: () {
-                  final mappedSongs = individualSongsRaw.map((raw) => SongModel(
-                    id: raw['id'] ?? '',
-                    song_name: raw['title'] ?? '',
-                    artist: raw['artist'] ?? '',
-                    thumbnail_url: raw['thumbnail_url'] ?? '',
-                    song_url: raw['path'] ?? '',
-                    hex_code: 'B388FF',
-                  )).toList();
+                  final mappedSongs = individualSongsRaw
+                      .map((raw) => SongModel.fromBackend(Map<String, dynamic>.from(raw), hexCode: 'B388FF'))
+                      .toList();
                   ref.read(currentSongNotifierProvider.notifier).updatePlaylist(mappedSongs, songIndex);
                 },
               );

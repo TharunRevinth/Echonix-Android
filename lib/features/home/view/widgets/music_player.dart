@@ -408,7 +408,9 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    currentSong.artist,
+                                    currentSong.album != null && currentSong.album!.isNotEmpty
+                                        ? '${currentSong.artist} • ${currentSong.album}'
+                                        : currentSong.artist,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
@@ -449,9 +451,12 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                           stream: songNotifier.audioPlayer?.positionStream,
                           builder: (context, snapshot) {
                             final position = snapshot.data ?? Duration.zero;
-                            final duration =
-                                songNotifier.audioPlayer?.duration ??
-                                    Duration.zero;
+                            final playerDuration = songNotifier.audioPlayer?.duration;
+                            final duration = (playerDuration != null && playerDuration.inMilliseconds > 0)
+                                ? playerDuration
+                                : (currentSong.duration_seconds != null && currentSong.duration_seconds! > 0
+                                    ? Duration(seconds: currentSong.duration_seconds!)
+                                    : Duration.zero);
                             final sliderVal = duration.inMilliseconds > 0
                                 ? (position.inMilliseconds /
                                         duration.inMilliseconds)
