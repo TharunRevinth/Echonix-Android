@@ -73,8 +73,8 @@ class PythonBackend {
     return _call('get_search_suggestions', {'query': query});
   }
 
-  static Future<Map<String, dynamic>> getTrendingSearches() async {
-    return _call('get_trending_searches', {});
+  static Future<Map<String, dynamic>> getTrendingSearches({String? country}) async {
+    return _call('get_trending_searches', {'country': country ?? 'ZZ'});
   }
 
   static Future<Map<String, dynamic>> redownloadLyrics(String videoId, String title, String artist) async {

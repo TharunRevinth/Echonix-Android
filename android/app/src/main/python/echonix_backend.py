@@ -728,12 +728,15 @@ def get_search_suggestions(query):
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
-def get_trending_searches():
+def get_trending_searches(country='ZZ'):
     global ytm
     if not ytm:
         return json.dumps({"success": False, "error": "YTMusic not initialized"})
     try:
-        charts = ytm.get_charts(country='US')
+        try:
+            charts = ytm.get_charts(country=country if country else 'ZZ')
+        except Exception:
+            charts = ytm.get_charts(country='ZZ')
         songs = []
         for s in charts.get('songs', {}).get('items', [])[:6]:
             songs.append({

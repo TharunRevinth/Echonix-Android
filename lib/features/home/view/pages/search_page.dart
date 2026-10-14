@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/utils.dart';
@@ -39,6 +40,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   List<Map<String, dynamic>> _trendingSongs = [];
   List<Map<String, dynamic>> _trendingAlbums = [];
   bool _loadingTrending = false;
+  bool _trendingFailed = false;
 
   // Speech recognition state
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -107,22 +109,37 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
 
     // Refresh in background/periodically
-    setState(() => _loadingTrending = _trendingSongs.isEmpty);
+    setState(() {
+      _loadingTrending = _trendingSongs.isEmpty;
+      _trendingFailed = false;
+    });
+
     try {
-      final res = await PythonBackend.getTrendingSearches();
+      final country = PlatformDispatcher.instance.locale.countryCode ?? 'ZZ';
+      final res = await PythonBackend.getTrendingSearches(country: country);
       if (res['success'] == true && mounted) {
         final List songsList = res['songs'] ?? [];
         final List albumsList = res['albums'] ?? [];
         setState(() {
           _trendingSongs = List<Map<String, dynamic>>.from(songsList);
           _trendingAlbums = List<Map<String, dynamic>>.from(albumsList);
-          _loadingTrending = false;
+          _trendingFailed = false;
         });
         localRepo.box.put('trending_songs', _trendingSongs);
         localRepo.box.put('trending_albums', _trendingAlbums);
+      } else {
+        if (mounted && _trendingSongs.isEmpty) {
+          setState(() => _trendingFailed = true);
+        }
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingTrending = false);
+      if (mounted && _trendingSongs.isEmpty) {
+        setState(() => _trendingFailed = true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loadingTrending = false);
+      }
     }
   }
 
@@ -577,6 +594,23 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24.0),
             child: Center(child: CupertinoActivityIndicator(color: Colors.purpleAccent)),
+          )
+        else if (_trendingFailed && _trendingSongs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  "Couldn't load trending.",
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+                TextButton(
+                  onPressed: _loadTrendingSearches,
+                  child: const Text('Retry', style: TextStyle(color: Colors.purpleAccent)),
+                ),
+              ],
+            ),
           )
         else ...[
           if (_trendingSongs.isNotEmpty) ...[
