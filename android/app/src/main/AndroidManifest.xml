@@ -11,6 +11,7 @@
         android:label="Echonix"
         android:name="com.chaquo.python.android.PyApplication"
         android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
         android:usesCleartextTraffic="true">
         
         <meta-data

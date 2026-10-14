@@ -6,6 +6,7 @@ import urllib.request
 import urllib.parse
 import re
 import threading
+import shlex
 import yt_dlp
 from ytmusicapi import YTMusic
 
@@ -30,57 +31,100 @@ def init_ytmusic(creds_dir):
             except Exception:
                 ytm = None
 
-def login_with_cookie(cookie_str_or_curl, creds_dir):
-    global ytm, creds_file_path, ytm_cache_path
-    ytm_cache_path = creds_dir
-    creds_file_path = os.path.join(creds_dir, 'browser.json')
-    try:
-        d = cookie_str_or_curl.strip()
-        headers = {}
-        
-        # Clean newlines from the command to make regex matching easy
-        cmd_clean = d.replace('\\\n', ' ').replace('\\\r\n', ' ').replace('`\n', ' ').replace('`\r\n', ' ')
+_auth_status_cache = {'time': 0, 'result': None}
 
-        # Parse all headers using regex (extremely fast, safe, and will never hang on binary payloads)
-        header_matches = re.findall(r'(?:-H|--header)\s+["\']?([^:\r\n]+):\s*([^"\']+)["\']?', cmd_clean, re.IGNORECASE)
+def parse_curl_command(curl_cmd):
+    headers = {}
+    clean_cmd = re.sub(r'\^[\r\n]+', ' ', curl_cmd)
+    clean_cmd = re.sub(r'\\(?:[\r\n]+)', ' ', clean_cmd)
+    clean_cmd = clean_cmd.replace('`\n', ' ').replace('`\r\n', ' ')
+
+    try:
+        tokens = shlex.split(clean_cmd)
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok in ('-H', '--header') and i + 1 < len(tokens):
+                header_line = tokens[i + 1]
+                if ':' in header_line:
+                    k, v = header_line.split(':', 1)
+                    headers[k.strip().lower()] = v.strip()
+                i += 2
+            elif tok in ('-b', '--cookie') and i + 1 < len(tokens):
+                headers['cookie'] = tokens[i + 1].strip()
+                i += 2
+            else:
+                i += 1
+    except Exception:
+        pass
+
+    if not headers.get('cookie'):
+        header_matches = re.findall(r'(?:-H|--header)\s+["\']?([^:\r\n]+):\s*([^"\']+)["\']?', clean_cmd, re.IGNORECASE)
         for key, val in header_matches:
             headers[key.strip().lower()] = val.strip()
-
-        # Parse cookie flag if present
-        cookie_matches = re.findall(r'(?:-b|--cookie)\s+["\']?([^"\']+)["\']?', cmd_clean, re.IGNORECASE)
+        cookie_matches = re.findall(r'(?:-b|--cookie)\s+["\']?([^"\']+)["\']?', clean_cmd, re.IGNORECASE)
         if cookie_matches:
             headers['cookie'] = cookie_matches[0].strip()
 
-        # Extract cookie value
-        cookie_val = headers.get('cookie', '')
+    return headers
+
+def login_with_cookie(cookie_str_or_curl, creds_dir):
+    global ytm, creds_file_path, ytm_cache_path, _auth_status_cache
+    ytm_cache_path = creds_dir
+    creds_file_path = os.path.join(creds_dir, 'browser.json')
+    tmp_creds_path = os.path.join(creds_dir, 'browser.json.tmp')
+
+    try:
+        d = cookie_str_or_curl.strip()
+        headers = {}
+        cookie_val = ''
+
+        if any(token in d for token in ('curl', '-H', '--header', '-b', '--cookie')):
+            headers = parse_curl_command(d)
+            cookie_val = headers.get('cookie', '')
+
         if not cookie_val:
-            # Check if input itself is a raw cookie string
-            if '=' in d and ';' in d and not any(x in d for x in ('curl', '-H', '--header')):
+            cookie_match = re.search(r'^\s*cookie:\s*(.+)$', d, re.IGNORECASE | re.MULTILINE)
+            if cookie_match:
+                cookie_val = cookie_match.group(1).strip()
+            elif '=' in d:
                 cookie_val = d
-            else:
-                # Check for line starting with cookie in raw text
-                cookie_match = re.search(r'^\s*cookie:\s*(.+)$', d, re.IGNORECASE | re.MULTILINE)
-                if cookie_match:
-                    cookie_val = cookie_match.group(1).strip()
 
         if not cookie_val:
-            return json.dumps({"success": False, "error": "No Cookie header found in the pasted content."})
+            return json.dumps({"success": False, "error": "No Cookie found in the pasted content."})
 
-        # Extract SAPISID from cookie and compute SAPISIDHASH for Authorization header
-        # to force ytmusicapi to recognize it as AuthType.BROWSER.
-        auth_val = headers.get('authorization', '')
-        if not auth_val or 'SAPISIDHASH' not in auth_val:
+        # Validate cookie contains at least one of SAPISID, __Secure-3PAPISID, SID
+        has_sapisid = 'SAPISID' in cookie_val
+        has_sec_sapisid = '__Secure-3PAPISID' in cookie_val
+        has_sid = 'SID=' in cookie_val
+
+        if not (has_sapisid or has_sec_sapisid or has_sid):
+            return json.dumps({"success": False, "error": "missing required auth cookies (need SAPISID or SID)"})
+
+        # Ensure __Secure-3PAPISID is present for ytmusicapi compatibility
+        if not has_sec_sapisid and has_sapisid:
             sapisid_match = re.search(r'SAPISID=([^;]+)', cookie_val)
             if sapisid_match:
-                sapisid = sapisid_match.group(1).strip()
-                import hashlib
-                import time
-                sha_1 = hashlib.sha1()
-                unix_timestamp = str(int(time.time()))
-                sha_1.update((unix_timestamp + " " + sapisid + " https://music.youtube.com").encode("utf-8"))
-                auth_val = "SAPISIDHASH " + unix_timestamp + "_" + sha_1.hexdigest()
+                cookie_val = cookie_val.rstrip('; ') + f"; __Secure-3PAPISID={sapisid_match.group(1).strip()}"
 
-        # Base template for browser.json headers
+        sapisid_target = ''
+        sec_match = re.search(r'__Secure-3PAPISID=([^;]+)', cookie_val)
+        if sec_match:
+            sapisid_target = sec_match.group(1).strip()
+        else:
+            sapisid_match = re.search(r'SAPISID=([^;]+)', cookie_val)
+            if sapisid_match:
+                sapisid_target = sapisid_match.group(1).strip()
+
+        auth_val = headers.get('authorization', '')
+        if (not auth_val or 'SAPISIDHASH' not in auth_val) and sapisid_target:
+            import hashlib
+            import time
+            sha_1 = hashlib.sha1()
+            unix_timestamp = str(int(time.time()))
+            sha_1.update((unix_timestamp + " " + sapisid_target + " https://music.youtube.com").encode("utf-8"))
+            auth_val = "SAPISIDHASH " + unix_timestamp + "_" + sha_1.hexdigest()
+
         final_headers = {
             'User-Agent': headers.get('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'),
             'Accept': headers.get('accept', '*/*'),
@@ -93,49 +137,69 @@ def login_with_cookie(cookie_str_or_curl, creds_dir):
         if auth_val:
             final_headers['Authorization'] = auth_val
 
-        # Clear old file if exists to prevent stale data issues
-        if creds_file_path and os.path.exists(creds_file_path):
-            try:
-                os.remove(creds_file_path)
-            except:
-                pass
+        # Write to temporary file first
+        os.makedirs(creds_dir, exist_ok=True)
+        with open(tmp_creds_path, 'w', encoding='utf-8') as f:
+            json.dump(final_headers, f, indent=2)
 
-        # Write final_headers to browser.json
-        if creds_file_path:
-            os.makedirs(os.path.dirname(creds_file_path), exist_ok=True)
-            with open(creds_file_path, 'w', encoding='utf-8') as f:
-                json.dump(final_headers, f, indent=2)
-
-        # Initialize and test YTMusic
-        test_ytm = YTMusic(creds_file_path) if creds_file_path else YTMusic(final_headers)
+        # Test temporary credentials
+        test_ytm = YTMusic(tmp_creds_path)
         test_ytm.get_library_songs(limit=1)
-        
-        ytm = test_ytm
+
+        # On success, atomically replace final credentials
+        os.replace(tmp_creds_path, creds_file_path)
+        with _ytm_lock:
+            ytm = test_ytm
+        _auth_status_cache = {'time': time.time(), 'result': {"authenticated": True, "valid": True}}
         return json.dumps({"success": True})
 
     except Exception as auth_e:
-        # Cleanup browser.json if test failed
+        # Remove tmp file only; preserve existing browser.json if any
         try:
-            if creds_file_path and os.path.exists(creds_file_path):
-                os.remove(creds_file_path)
+            if os.path.exists(tmp_creds_path):
+                os.remove(tmp_creds_path)
         except:
             pass
         return json.dumps({"success": False, "error": f"Authentication test failed: {str(auth_e)}"})
 
 def logout():
-    global ytm, creds_file_path
+    global ytm, creds_file_path, _auth_status_cache
     try:
         if creds_file_path and os.path.exists(creds_file_path):
             os.remove(creds_file_path)
-        ytm = YTMusic()
+        with _ytm_lock:
+            ytm = YTMusic()
+        _auth_status_cache = {'time': time.time(), 'result': {"authenticated": False, "valid": False}}
         return json.dumps({"success": True})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
 def check_auth_status():
-    global creds_file_path
+    global creds_file_path, ytm, _auth_status_cache
+    now = time.time()
+    if _auth_status_cache.get('result') is not None and (now - _auth_status_cache.get('time', 0)) < 600:
+        return json.dumps(_auth_status_cache['result'])
+
     has_creds = os.path.exists(creds_file_path) if creds_file_path else False
-    return json.dumps({"authenticated": has_creds})
+    if not has_creds:
+        res = {"authenticated": False, "valid": False}
+        _auth_status_cache = {'time': now, 'result': res}
+        return json.dumps(res)
+
+    try:
+        if not ytm and creds_file_path:
+            with _ytm_lock:
+                ytm = YTMusic(creds_file_path)
+        if ytm:
+            ytm.get_library_songs(limit=1)
+            res = {"authenticated": True, "valid": True}
+        else:
+            res = {"authenticated": True, "valid": False}
+    except Exception:
+        res = {"authenticated": True, "valid": False}
+
+    _auth_status_cache = {'time': now, 'result': res}
+    return json.dumps(res)
 
 def get_home_feed():
     global ytm
