@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:chaquopy/chaquopy.dart';
+import 'package:hive/hive.dart';
 
 class PythonBackend {
   // ---------------------------------------------------------------------------
@@ -187,5 +188,36 @@ class PythonBackend {
 
   static Future<Map<String, dynamic>> deleteDownloadedSong(String videoId) async {
     return _call('delete_downloaded_song', {'video_id': videoId});
+  }
+
+  static Future<Map<String, dynamic>> getUpNext(String videoId, {int limit = 25}) async {
+    final box = Hive.box();
+    final Map upnextCache = Map.from(box.get('upnext_cache') as Map? ?? {});
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (upnextCache.containsKey(videoId)) {
+      final cached = upnextCache[videoId];
+      if (cached is Map) {
+        final savedAt = (cached['savedAt'] as num?)?.toInt() ?? 0;
+        if (now - savedAt < 30 * 60 * 1000) {
+          final tracks = cached['tracks'];
+          if (tracks is List) {
+            return {'success': true, 'tracks': tracks};
+          }
+        }
+      }
+    }
+
+    final res = await _call('get_up_next', {'video_id': videoId, 'limit': limit}, lane: 'background');
+    if (res['success'] == true && res['tracks'] is List) {
+      upnextCache[videoId] = {
+        'savedAt': now,
+        'tracks': res['tracks'],
+      };
+      if (upnextCache.length > 50) {
+        upnextCache.remove(upnextCache.keys.first);
+      }
+      box.put('upnext_cache', upnextCache);
+    }
+    return res;
   }
 }

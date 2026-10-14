@@ -993,6 +993,41 @@ def get_downloaded_songs():
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
+def get_up_next(video_id, limit=25):
+    global ytm
+    if not ytm:
+        return json.dumps({"success": False, "error": "YTMusic not initialized"})
+    try:
+        limit = int(limit)
+        res = ytm.get_watch_playlist(videoId=video_id, radio=True, limit=limit)
+        tracks = []
+        for r in res.get('tracks', []):
+            vid = r.get('videoId')
+            if vid:
+                album_val = r.get('album', {})
+                album_name = album_val.get('name', '') if isinstance(album_val, dict) else str(album_val or '')
+                artists = r.get('artists', [])
+                if isinstance(artists, list):
+                    artist_str = ', '.join(a.get('name', '') if isinstance(a, dict) else str(a) for a in artists)
+                else:
+                    artist_str = str(artists or 'Unknown')
+                thumbs = r.get('thumbnails') or [{}]
+                thumb_url = thumbs[-1].get('url', '') if isinstance(thumbs, list) and thumbs else ''
+                tracks.append({
+                    'id': vid,
+                    'title': r.get('title', ''),
+                    'artist': artist_str or 'Unknown',
+                    'album': album_name,
+                    'thumbnail': thumb_url,
+                    'duration': r.get('duration_seconds', 0),
+                    'duration_seconds': r.get('duration_seconds', 0),
+                    'setVideoId': r.get('setVideoId', '')
+                })
+        return json.dumps({"success": True, "tracks": tracks})
+    except Exception as e:
+        status = _extract_http_status(e)
+        return json.dumps({"success": False, "error": str(e), "http_status": status})
+
 WHITELIST = {
     'init_ytmusic': init_ytmusic,
     'login_with_cookie': login_with_cookie,
@@ -1021,6 +1056,7 @@ WHITELIST = {
     'add_playlist_items': add_playlist_items,
     'remove_playlist_items': remove_playlist_items,
     'get_library_playlists': get_library_playlists,
+    'get_up_next': get_up_next,
 }
 
 def dispatch(fn_name: str, args_json: str) -> str:
