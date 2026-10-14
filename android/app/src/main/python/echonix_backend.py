@@ -706,24 +706,9 @@ def get_search_suggestions(query):
         return json.dumps({"success": False, "error": "YTMusic not initialized"})
     try:
         queries = ytm.get_search_suggestions(query)
-        results = ytm.search(query, limit=8)
-        rich = []
-        for r in results:
-            rtype = r.get('resultType', '')
-            if rtype in ('song', 'artist', 'album', 'playlist'):
-                title = r.get('title') or r.get('artists', [{}])[0].get('name', '')
-                artists = ', '.join(a['name'] for a in r.get('artists', [])) if r.get('artists') else ''
-                rich.append({
-                    'title': title,
-                    'type': rtype,
-                    'artist': artists,
-                    'thumbnail': (r.get('thumbnails') or [{}])[-1].get('url', ''),
-                    'id': r.get('videoId') or r.get('browseId') or r.get('playlistId') or ''
-                })
         return json.dumps({
             "success": True,
             "queries": queries,
-            "rich": rich
         })
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})

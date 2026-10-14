@@ -33,8 +33,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   // Suggestions state
   List<String> _textSuggestions = [];
-  List<Map<String, dynamic>> _richSuggestions = [];
   Timer? _debounceTimer;
+  int _searchSuggestionRequestId = 0;
 
   // Trending state
   List<Map<String, dynamic>> _trendingSongs = [];
@@ -68,10 +68,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
-    if (query.isEmpty) {
+    if (query.length < 2) {
+      _debounceTimer?.cancel();
       setState(() {
         _textSuggestions = [];
-        _richSuggestions = [];
       });
       return;
     }
@@ -83,14 +83,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 
   void _fetchSuggestions(String query) async {
+    final requestId = ++_searchSuggestionRequestId;
     try {
       final res = await PythonBackend.getSearchSuggestions(query);
+      if (requestId != _searchSuggestionRequestId) return;
       if (res['success'] == true && mounted) {
         final List queriesList = res['queries'] ?? [];
-        final List richList = res['rich'] ?? [];
         setState(() {
           _textSuggestions = List<String>.from(queriesList);
-          _richSuggestions = List<Map<String, dynamic>>.from(richList);
         });
       }
     } catch (_) {}
@@ -155,7 +155,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _isLoading = true;
       _errorMessage = '';
       _textSuggestions = [];
-      _richSuggestions = [];
     });
 
     try {
@@ -464,70 +463,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 110),
       children: [
-        // Rich suggestions (Songs, Albums, Artists)
-        if (_richSuggestions.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text('Best Matches', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          ..._richSuggestions.map((item) {
-            final type = item['type'] as String? ?? 'song';
-            return ListTile(
-              onTap: () {
-                if (type == 'song') {
-                  // Play song immediately!
-                  final song = SongModel(
-                    id: item['id'] ?? '',
-                    song_name: item['title'] ?? '',
-                    artist: item['artist'] ?? '',
-                    thumbnail_url: item['thumbnail'] ?? '',
-                    song_url: 'https://www.youtube.com/watch?v=${item['id']}',
-                    hex_code: 'B388FF',
-                  );
-                  ref.read(currentSongNotifierProvider.notifier).updateSong(song);
-                } else if (type == 'playlist' || type == 'album') {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => PlaylistDetailsPage(
-                        id: item['id'] ?? '',
-                        title: item['title'] ?? '',
-                        thumbnailUrl: item['thumbnail'] ?? '',
-                        isAlbum: type == 'album',
-                      ),
-                    ),
-                  );
-                } else {
-                  // Artist: trigger search
-                  _performSearch(item['title'] ?? '');
-                }
-              },
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(type == 'artist' ? 24 : 4),
-                child: CachedNetworkImage(
-                  imageUrl: getHighQualityThumbnail(item['thumbnail'] ?? ''),
-                  width: 40,
-                  height: 40,
-                  memCacheWidth: 80,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) =>
-                      const Icon(Icons.music_note),
-                ),
-              ),
-              title: Text(
-                item['title'] ?? '',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                '${type.toUpperCase()} • ${item['artist'] ?? 'Echonix'}',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            );
-          }),
-          const Divider(color: Colors.white10),
-        ],
-
         // Text completion queries
         if (_textSuggestions.isNotEmpty) ...[
           const Padding(
