@@ -7,6 +7,7 @@ import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/core/sync/sync_service.dart';
+import 'package:client/core/recommendation/listening_signals.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:just_audio/just_audio.dart';
@@ -323,6 +324,48 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   bool _hasCountedForCurrentSong = false;
   bool _needsEqReapply = false;
   List<SongModel>? _unshuffledPlaylist;
+  SongModel? _activeSignalTrack;
+  int _activeSignalStartedAt = 0;
+  int _maxPositionMs = 0;
+
+  void _recordListeningSignal({bool completed = false}) {
+    if (_activeSignalTrack == null) return;
+    final track = _activeSignalTrack!;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final durationMs = audioPlayer?.duration?.inMilliseconds ?? (track.duration_seconds * 1000);
+    final playedMs = _maxPositionMs;
+
+    final isCompleted = completed || (durationMs > 0 && playedMs >= (durationMs * 0.95).toInt());
+
+    int thresholdMs = 30000;
+    if (durationMs > 0) {
+      final thirtyPercent = (durationMs * 0.3).toInt();
+      if (thirtyPercent < thresholdMs) {
+        thresholdMs = thirtyPercent;
+      }
+    }
+    final skippedEarly = !isCompleted && (playedMs < thresholdMs);
+
+    ListeningSignalsRepository.recordSignal(ListeningSignal(
+      videoId: track.id,
+      artist: track.artist,
+      startedAt: _activeSignalStartedAt > 0 ? _activeSignalStartedAt : now,
+      playedMs: playedMs,
+      durationMs: durationMs,
+      completed: isCompleted,
+      skippedEarly: skippedEarly,
+    ));
+
+    _activeSignalTrack = null;
+    _maxPositionMs = 0;
+  }
+
+  void _startListeningSignal(SongModel song) {
+    _recordListeningSignal(completed: false);
+    _activeSignalTrack = song;
+    _activeSignalStartedAt = DateTime.now().millisecondsSinceEpoch;
+    _maxPositionMs = 0;
+  }
 
   ConcatenatingAudioSource? _playlistSource;
   LocalRedirectServer? _redirectServer;
@@ -411,6 +454,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         currentSongIndex = index;
         state = song;
         _hasCountedForCurrentSong = false;
+        _startListeningSignal(song);
 
         _homeLocalRepository.uploadLocalSong(song);
         _homeLocalRepository.recordRecentlyPlayed(song);
@@ -425,6 +469,9 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
     // Position-based tracker: min(30s, 50% duration)
     audioPlayer!.positionStream.listen((position) {
+      if (position.inMilliseconds > _maxPositionMs) {
+        _maxPositionMs = position.inMilliseconds;
+      }
       if (_hasCountedForCurrentSong || state == null) return;
 
       final duration = audioPlayer?.duration;
@@ -462,6 +509,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       if (processingState == ProcessingState.completed) {
         isPlaying = false;
         _hasCountedForCurrentSong = false;
+        _recordListeningSignal(completed: true);
       }
     });
   }
@@ -546,6 +594,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       final song = playlist[index];
       state = song;
       _hasCountedForCurrentSong = false;
+      _startListeningSignal(song);
 
       _homeLocalRepository.uploadLocalSong(song);
       _homeLocalRepository.recordRecentlyPlayed(song);
