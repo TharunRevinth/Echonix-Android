@@ -10,6 +10,7 @@ import 'package:client/core/python_backend.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/view/pages/queue_page.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -506,6 +507,48 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                                   size: 24,
                                 ),
                               ),
+                              Consumer(
+                                builder: (context, ref, _) {
+                                  final mode = ref.watch(repeatModeProvider);
+                                  final isActive = mode != LoopMode.off;
+                                  return IconButton(
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: songNotifier.cycleRepeatMode,
+                                    icon: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/repeat.png',
+                                          width: 22,
+                                          height: 22,
+                                          color: isActive ? Pallete.borderColor : Colors.white60,
+                                        ),
+                                        if (mode == LoopMode.one)
+                                          Positioned(
+                                            right: 0,
+                                            top: 0,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: const BoxDecoration(
+                                                color: Pallete.borderColor,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Text(
+                                                '1',
+                                                style: TextStyle(
+                                                  color: Colors.black,
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                               IconButton(
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
@@ -530,13 +573,22 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: songNotifier.playPause,
-                                  icon: Icon(
-                                    ref.watch(isPlayingProvider).value ?? false
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    color: Colors.black,
-                                    size: 36,
-                                  ),
+                                  icon: ref.watch(isPlayerLoadingProvider)
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.black,
+                                          ),
+                                        )
+                                      : Icon(
+                                          ref.watch(isPlayingProvider).value ?? false
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                          color: Colors.black,
+                                          size: 36,
+                                        ),
                                 ),
                               ),
                               IconButton(

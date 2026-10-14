@@ -15,6 +15,8 @@ import 'package:flutter/services.dart';
 part 'current_song_notifier.g.dart';
 
 final shuffleProvider = StateProvider<bool>((ref) => false);
+final repeatModeProvider = StateProvider<LoopMode>((ref) => LoopMode.off);
+final isPlayerLoadingProvider = StateProvider<bool>((ref) => false);
 
 class _StreamCacheEntry {
   final String url;
@@ -313,7 +315,8 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   bool isPlaying = false;
   List<SongModel> playlist = [];
   int currentSongIndex = -1;
-  bool _isLoading = false;
+  int _playRequestId = 0;
+  bool _isServerStarted = false;
 
   ConcatenatingAudioSource? _playlistSource;
   LocalRedirectServer? _redirectServer;
@@ -333,7 +336,9 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
   void _initRedirectServer() {
     _redirectServer = LocalRedirectServer();
-    _serverStartFuture = _redirectServer!.start();
+    _serverStartFuture = _redirectServer!.start().then((_) {
+      _isServerStarted = true;
+    });
   }
 
   void _initAudioPlayer() {
@@ -378,6 +383,17 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       audioPlayer!.setShuffleModeEnabled(shuffleEnabled);
     });
 
+    // Read persisted repeat mode and apply to player (default LoopMode.off)
+    SharedPreferences.getInstance().then((prefs) {
+      final modeStr = prefs.getString('repeat_mode') ?? 'off';
+      final mode = LoopMode.values.firstWhere(
+        (e) => e.name == modeStr,
+        orElse: () => LoopMode.off,
+      );
+      ref.read(repeatModeProvider.notifier).state = mode;
+      audioPlayer?.setLoopMode(mode);
+    });
+
     // Listen to play/pause state
     audioPlayer!.playingStream.listen((playing) {
       isPlaying = playing;
@@ -406,8 +422,12 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       }
     });
 
-    // Listen to playback completion
+    // Listen to playback completion and expose loading state
     audioPlayer!.processingStateStream.listen((processingState) {
+      final isLoading = processingState == ProcessingState.loading ||
+          processingState == ProcessingState.buffering;
+      ref.read(isPlayerLoadingProvider.notifier).state = isLoading;
+
       if (processingState == ProcessingState.completed) {
         isPlaying = false;
         if (state != null) {
@@ -416,6 +436,20 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         }
       }
     });
+  }
+
+  void cycleRepeatMode() async {
+    if (audioPlayer == null) return;
+    final current = ref.read(repeatModeProvider);
+    final next = switch (current) {
+      LoopMode.off => LoopMode.all,
+      LoopMode.all => LoopMode.one,
+      LoopMode.one => LoopMode.off,
+    };
+    ref.read(repeatModeProvider.notifier).state = next;
+    await audioPlayer!.setLoopMode(next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('repeat_mode', next.name);
   }
 
   AudioSource _buildAudioSource(SongModel song) {
@@ -455,19 +489,19 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   }
 
   void updatePlaylist(List<SongModel> songs, int index) async {
-    if (_isLoading) return;
-    _isLoading = true;
+    final requestId = ++_playRequestId;
 
     try {
-      if (_serverStartFuture != null) {
+      if (!_isServerStarted && _serverStartFuture != null) {
         await _serverStartFuture;
+        if (requestId != _playRequestId) return;
       }
 
       _initAudioPlayer();
-      // Safely stop the player first to cancel any active platform connections and prevent deadlocks/hangs
       try {
         await audioPlayer!.stop();
       } catch (_) {}
+      if (requestId != _playRequestId) return;
 
       playlist = songs;
       currentSongIndex = index;
@@ -479,6 +513,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       ref.invalidate(recentlyPlayedProvider);
       ref.invalidate(listeningHistoryProvider);
 
+      final nextIndex = index + 1;
+      if (nextIndex < playlist.length) {
+        _redirectServer?.prefetch(playlist[nextIndex].id);
+      }
+
       // Build sequence using local redirect URLs for all YouTube songs
       final sources = <AudioSource>[];
       for (final s in playlist) {
@@ -486,17 +525,21 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       }
 
       _playlistSource = ConcatenatingAudioSource(children: sources);
-      await audioPlayer!.setAudioSource(_playlistSource!, initialIndex: index, initialPosition: Duration.zero);
-      await audioPlayer!.setLoopMode(LoopMode.all);
+      await audioPlayer!.setAudioSource(
+        _playlistSource!,
+        initialIndex: index,
+        initialPosition: Duration.zero,
+      );
+      if (requestId != _playRequestId) return;
+
+      final repeatMode = ref.read(repeatModeProvider);
+      await audioPlayer!.setLoopMode(repeatMode);
+      if (requestId != _playRequestId) return;
 
       await audioPlayer!.play();
       isPlaying = true;
     } catch (e, st) {
-      // Print fully to console so we can trace playback failures
-      print("Echonix Playback Error: $e");
-      print(st);
-    } finally {
-      _isLoading = false;
+      debugPrint("Echonix Playback Error: $e\n$st");
     }
   }
 

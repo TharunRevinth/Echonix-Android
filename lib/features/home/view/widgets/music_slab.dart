@@ -176,13 +176,22 @@ class _MusicSlabState extends ConsumerState<MusicSlab> {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: songNotifier.playPause,
-                        icon: Icon(
-                          ref.watch(isPlayingProvider).value ?? false
-                              ? CupertinoIcons.pause_fill
-                              : CupertinoIcons.play_fill,
-                          color: Colors.white,
-                          size: 26,
-                        ),
+                        icon: ref.watch(isPlayerLoadingProvider)
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Icon(
+                                ref.watch(isPlayingProvider).value ?? false
+                                    ? CupertinoIcons.pause_fill
+                                    : CupertinoIcons.play_fill,
+                                color: Colors.white,
+                                size: 26,
+                              ),
                       ),
                       const SizedBox(width: 4),
                     ],
