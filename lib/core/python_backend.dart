@@ -85,11 +85,19 @@ class PythonBackend {
     });
   }
 
-  static Future<Map<String, dynamic>> getLyrics(String title, String artist) async {
-    return _call('get_lyrics', {
+  static Future<Map<String, dynamic>> getLyrics(
+    String title,
+    String artist, {
+    int? durationSeconds,
+  }) async {
+    final Map<String, dynamic> args = {
       'title': title,
       'artist': artist,
-    });
+    };
+    if (durationSeconds != null) {
+      args['duration_seconds'] = durationSeconds;
+    }
+    return _call('get_lyrics', args);
   }
 
   static Future<Map<String, dynamic>> getStreamUrl(String videoId) async {

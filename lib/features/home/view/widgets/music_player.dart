@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/dominant_color_provider.dart';
+import 'package:hive/hive.dart';
 
 class MusicPlayer extends ConsumerStatefulWidget {
   const MusicPlayer({super.key});
@@ -59,7 +60,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final currentSong = ref.read(currentSongNotifierProvider);
       if (currentSong != null) {
-        _loadLyrics(currentSong.song_name, currentSong.artist, currentSong.song_url);
+        _loadLyrics(currentSong);
       }
     });
   }
@@ -73,21 +74,68 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
     super.dispose();
   }
 
-  void _loadLyrics(String songName, String artist, String songUrl) async {
-    if (_lyricsLoadedFor == '$songName|$artist') return;
+  void _applyLyrics(String lyrics, bool isSynced, String songId) {
+    if (!mounted) return;
+    if (isSynced) {
+      final lines = _parseLrc(lyrics);
+      setState(() {
+        _syncedLines = lines;
+        _lyricKeys = List.generate(lines.length, (_) => GlobalKey());
+        _hasSynced = true;
+        _lyricsLoading = false;
+        _lyricsLoadedFor = songId;
+      });
+      _startLyricSync();
+    } else {
+      setState(() {
+        _plainLyrics = lyrics;
+        _hasSynced = false;
+        _lyricsLoading = false;
+        _lyricsLoadedFor = songId;
+      });
+    }
+  }
+
+  void _loadLyrics(SongModel song) async {
+    final songId = song.id;
+    if (_lyricsLoadedFor == songId) return;
+
     setState(() {
       _lyricsLoading = true;
       _syncedLines = [];
       _lyricKeys = [];
       _plainLyrics = '';
       _hasSynced = false;
-      _lyricsLoadedFor = '$songName|$artist';
+      _lyricsLoadedFor = songId;
       _lyricsOffsetMs = 0;
     });
 
-    // Try to load offline lyrics first if song_url is a local path
-    if (songUrl.startsWith('/')) {
-      final metaFile = File('$songUrl.json');
+    final Box box = Hive.box();
+    final dynamic rawCache = box.get('lyrics_cache');
+    final Map<String, dynamic> cache =
+        rawCache is Map ? Map<String, dynamic>.from(rawCache) : {};
+
+    // 1. Look in cache before the network
+    if (cache.containsKey(songId)) {
+      final item = cache[songId];
+      if (item is Map) {
+        final synced = item['synced'] == true;
+        final lyrics = item['lyrics'] as String? ?? '';
+        if (lyrics.isNotEmpty) {
+          // Re-insert to refresh LRU
+          cache.remove(songId);
+          cache[songId] = item;
+          box.put('lyrics_cache', cache);
+
+          _applyLyrics(lyrics, synced, songId);
+          return;
+        }
+      }
+    }
+
+    // 2. Try to load offline lyrics first if song_url is a local path
+    if (song.song_url.startsWith('/')) {
+      final metaFile = File('${song.song_url}.json');
       if (await metaFile.exists()) {
         try {
           final content = await metaFile.readAsString();
@@ -97,50 +145,51 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
             final lyrics = lyricsData['lyrics'] as String? ?? '';
             final isSynced = lyricsData['synced'] == true;
             if (lyrics.isNotEmpty) {
-              if (isSynced) {
-                final lines = _parseLrc(lyrics);
-                setState(() {
-                  _syncedLines = lines;
-                  _lyricKeys = List.generate(lines.length, (_) => GlobalKey());
-                  _hasSynced = true;
-                  _lyricsLoading = false;
-                });
-                _startLyricSync();
-              } else {
-                setState(() {
-                  _plainLyrics = lyrics;
-                  _hasSynced = false;
-                  _lyricsLoading = false;
-                });
+              cache[songId] = {
+                'synced': isSynced,
+                'lyrics': lyrics,
+                'savedAt': DateTime.now().millisecondsSinceEpoch,
+              };
+              while (cache.length > 200) {
+                final oldestKey = cache.keys.first;
+                cache.remove(oldestKey);
               }
-              return; // Offline lyrics successfully loaded!
+              box.put('lyrics_cache', cache);
+
+              _applyLyrics(lyrics, isSynced, songId);
+              return;
             }
           }
         } catch (_) {}
       }
     }
 
-    final data = await PythonBackend.getLyrics(songName, artist);
+    // 3. Network fetch (background lane)
+    final data = await PythonBackend.getLyrics(song.song_name, song.artist);
     if (!mounted) return;
+
+    // Check if the current song id changed while waiting (drop stale response)
+    final currentSong = ref.read(currentSongNotifierProvider);
+    if (currentSong?.id != songId) {
+      return;
+    }
+
     if (data['success'] == true) {
       final lyrics = data['lyrics'] as String? ?? '';
       final isSynced = data['synced'] == true;
-      if (isSynced) {
-        final lines = _parseLrc(lyrics);
-        setState(() {
-          _syncedLines = lines;
-          _lyricKeys = List.generate(lines.length, (_) => GlobalKey());
-          _hasSynced = true;
-          _lyricsLoading = false;
-        });
-        _startLyricSync();
-      } else {
-        setState(() {
-          _plainLyrics = lyrics;
-          _hasSynced = false;
-          _lyricsLoading = false;
-        });
+      if (lyrics.isNotEmpty) {
+        cache[songId] = {
+          'synced': isSynced,
+          'lyrics': lyrics,
+          'savedAt': DateTime.now().millisecondsSinceEpoch,
+        };
+        while (cache.length > 200) {
+          final oldestKey = cache.keys.first;
+          cache.remove(oldestKey);
+        }
+        box.put('lyrics_cache', cache);
       }
+      _applyLyrics(lyrics, isSynced, songId);
     } else {
       setState(() => _lyricsLoading = false);
     }
@@ -245,7 +294,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
 
     ref.listen<SongModel?>(currentSongNotifierProvider, (previous, next) {
       if (next != null) {
-        _loadLyrics(next.song_name, next.artist, next.song_url);
+        _loadLyrics(next);
       }
     });
 

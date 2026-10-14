@@ -294,7 +294,7 @@ def get_album_details(album_id):
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
-def get_lyrics(title, artist):
+def get_lyrics(title, artist, duration_seconds=None):
     try:
         # Clean common parentheses and brackets from title
         clean_title = re.sub(r'\s*[\(\[].*?[\)\]]', '', title).strip()
@@ -380,6 +380,8 @@ def get_lyrics(title, artist):
         for t_title, t_artist in candidates:
             try:
                 url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(t_artist)}&track_name={urllib.parse.quote(t_title)}"
+                if duration_seconds is not None:
+                    url += f"&duration={int(duration_seconds)}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Echonix/1.0'})
                 with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as r:
                     data = json.loads(r.read())
