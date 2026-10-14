@@ -4,27 +4,30 @@ import json
 import urllib.request
 import urllib.parse
 import re
+import threading
 import yt_dlp
 from ytmusicapi import YTMusic
 
 ytm = None
 creds_file_path = None
 ytm_cache_path = None
+_ytm_lock = threading.Lock()
 
 def init_ytmusic(creds_dir):
     global ytm, creds_file_path, ytm_cache_path
-    ytm_cache_path = creds_dir
-    creds_file_path = os.path.join(creds_dir, 'browser.json')
-    try:
-        if os.path.exists(creds_file_path):
-            ytm = YTMusic(creds_file_path)
-        else:
-            ytm = YTMusic()
-    except Exception as e:
+    with _ytm_lock:
+        ytm_cache_path = creds_dir
+        creds_file_path = os.path.join(creds_dir, 'browser.json')
         try:
-            ytm = YTMusic()
-        except Exception:
-            ytm = None
+            if os.path.exists(creds_file_path):
+                ytm = YTMusic(creds_file_path)
+            else:
+                ytm = YTMusic()
+        except Exception as e:
+            try:
+                ytm = YTMusic()
+            except Exception:
+                ytm = None
 
 def login_with_cookie(cookie_str_or_curl, creds_dir):
     global ytm, creds_file_path, ytm_cache_path
@@ -705,3 +708,40 @@ def get_downloaded_songs():
         return json.dumps({"success": True, "songs": songs})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
+
+WHITELIST = {
+    'init_ytmusic': init_ytmusic,
+    'login_with_cookie': login_with_cookie,
+    'logout': logout,
+    'check_auth_status': check_auth_status,
+    'get_home_feed': get_home_feed,
+    'search_songs': search_songs,
+    'get_playlist_details': get_playlist_details,
+    'get_album_details': get_album_details,
+    'get_lyrics': get_lyrics,
+    'get_stream_url': get_stream_url,
+    'rate_song': rate_song,
+    'add_history': add_history,
+    'get_liked_songs': get_liked_songs,
+    'download_song': download_song,
+    'redownload_lyrics': redownload_lyrics,
+    'get_search_suggestions': get_search_suggestions,
+    'get_trending_searches': get_trending_searches,
+    'get_downloaded_songs': get_downloaded_songs,
+}
+
+def dispatch(fn_name: str, args_json: str) -> str:
+    if fn_name not in WHITELIST:
+        return json.dumps({"success": False, "error": "unknown function"})
+    try:
+        kwargs = json.loads(args_json) if args_json else {}
+        fn = WHITELIST[fn_name]
+        res = fn(**kwargs)
+        if res is None:
+            return json.dumps({"success": True})
+        if isinstance(res, str):
+            return res
+        return json.dumps(res)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+

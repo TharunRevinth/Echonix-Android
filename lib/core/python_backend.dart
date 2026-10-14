@@ -1,31 +1,25 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:convert';
 import 'package:chaquopy/chaquopy.dart';
 
-/// Runs a python snippet in a fresh isolate so it never blocks the UI thread.
-/// We cannot pass the MethodChannel itself across isolates, so we spawn
-/// a one-shot isolate that re-invokes the channel through a ReceivePort.
 class PythonBackend {
   // ---------------------------------------------------------------------------
-  // Internal helpers
+  // Internal helper
   // ---------------------------------------------------------------------------
 
-  static Future<Map<String, dynamic>> _runCode(String pythonCode) async {
+  static Future<Map<String, dynamic>> _call(
+    String fn,
+    Map<String, dynamic> args, {
+    String lane = 'background',
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     try {
-      final result = await Chaquopy.executeCode(pythonCode);
-      final String output = result['textOutputOrError']?.trim() ?? '';
-
-      final lines = output.split('\n');
-      for (int i = lines.length - 1; i >= 0; i--) {
-        final line = lines[i].trim();
-        if (line.startsWith('{') && line.endsWith('}')) {
-          try {
-            return jsonDecode(line) as Map<String, dynamic>;
-          } catch (_) {}
-        }
+      final raw = await Chaquopy.invoke(fn, args, lane: lane, timeout: timeout);
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
       }
-      return {'success': false, 'error': output.isEmpty ? 'empty output' : output};
+      return {'success': true, 'data': decoded};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -36,166 +30,103 @@ class PythonBackend {
   // ---------------------------------------------------------------------------
 
   static Future<void> init(String credsDir) async {
-    final base64Dir = base64Encode(utf8.encode(credsDir));
-    await Chaquopy.executeCode("""
-import base64
-import echonix_backend
-dir_path = base64.b64decode('$base64Dir').decode('utf-8')
-echonix_backend.init_ytmusic(dir_path)
-""");
+    await Chaquopy.invoke(
+      'init_ytmusic',
+      {'creds_dir': credsDir},
+      lane: 'priority',
+    );
   }
 
   static Future<Map<String, dynamic>> loginWithCookie(String cookie, String credsDir) async {
-    final b64 = base64Encode(utf8.encode(cookie));
-    final b64Dir = base64Encode(utf8.encode(credsDir));
-    return _runCode("""
-import base64
-import echonix_backend
-cookie = base64.b64decode('$b64').decode('utf-8', errors='ignore')
-creds_dir = base64.b64decode('$b64Dir').decode('utf-8')
-print(echonix_backend.login_with_cookie(cookie, creds_dir))
-""");
+    return _call(
+      'login_with_cookie',
+      {'cookie_str_or_curl': cookie, 'creds_dir': credsDir},
+      lane: 'priority',
+    );
   }
 
   static Future<Map<String, dynamic>> logout() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.logout())
-""");
+    return _call('logout', {});
   }
 
   static Future<Map<String, dynamic>> checkAuthStatus() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.check_auth_status())
-""");
+    return _call('check_auth_status', {}, lane: 'priority');
   }
 
   static Future<Map<String, dynamic>> getHomeFeed() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_home_feed())
-""");
+    return _call('get_home_feed', {});
   }
 
   static Future<Map<String, dynamic>> searchSongs(String query) async {
-    final b64 = base64Encode(utf8.encode(query));
-    return _runCode("""
-import base64
-import echonix_backend
-query = base64.b64decode('$b64').decode('utf-8')
-print(echonix_backend.search_songs(query))
-""");
+    return _call('search_songs', {'query': query});
   }
 
   static Future<Map<String, dynamic>> getPlaylistDetails(String playlistId) async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_playlist_details('$playlistId'))
-""");
+    return _call('get_playlist_details', {'playlist_id': playlistId});
   }
 
   static Future<Map<String, dynamic>> getAlbumDetails(String albumId) async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_album_details('$albumId'))
-""");
+    return _call('get_album_details', {'album_id': albumId});
   }
 
   static Future<Map<String, dynamic>> getSearchSuggestions(String query) async {
-    final b64 = base64Encode(utf8.encode(query));
-    return _runCode("""
-import base64
-import echonix_backend
-query = base64.b64decode('$b64').decode('utf-8')
-print(echonix_backend.get_search_suggestions(query))
-""");
+    return _call('get_search_suggestions', {'query': query});
   }
 
   static Future<Map<String, dynamic>> getTrendingSearches() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_trending_searches())
-""");
+    return _call('get_trending_searches', {});
   }
 
   static Future<Map<String, dynamic>> redownloadLyrics(String videoId, String title, String artist) async {
-    final b64Title = base64Encode(utf8.encode(title));
-    final b64Artist = base64Encode(utf8.encode(artist));
-    return _runCode("""
-import base64
-import echonix_backend
-title = base64.b64decode('$b64Title').decode('utf-8')
-artist = base64.b64decode('$b64Artist').decode('utf-8')
-print(echonix_backend.redownload_lyrics('$videoId', title, artist))
-""");
+    return _call('redownload_lyrics', {
+      'video_id': videoId,
+      'title': title,
+      'artist': artist,
+    });
   }
 
   static Future<Map<String, dynamic>> getLyrics(String title, String artist) async {
-    final b64Title = base64Encode(utf8.encode(title));
-    final b64Artist = base64Encode(utf8.encode(artist));
-    return _runCode("""
-import base64
-import echonix_backend
-title = base64.b64decode('$b64Title').decode('utf-8')
-artist = base64.b64decode('$b64Artist').decode('utf-8')
-print(echonix_backend.get_lyrics(title, artist))
-""");
+    return _call('get_lyrics', {
+      'title': title,
+      'artist': artist,
+    });
   }
 
-  /// Resolves a YouTube stream URL. This call can take a few seconds so the
-  /// caller should show a loading indicator while awaiting.
   static Future<Map<String, dynamic>> getStreamUrl(String videoId) async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_stream_url('$videoId'))
-""");
+    return _call('get_stream_url', {'video_id': videoId}, lane: 'priority');
   }
 
   static Future<Map<String, dynamic>> rateSong(String videoId, String rating) async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.rate_song('$videoId', '$rating'))
-""");
+    return _call('rate_song', {'video_id': videoId, 'rating': rating}, lane: 'priority');
   }
 
   static Future<void> addHistory(String videoId) async {
     try {
-      await Chaquopy.executeCode("""
-import echonix_backend
-echonix_backend.add_history('$videoId')
-""");
+      await _call('add_history', {'video_id': videoId});
     } catch (_) {}
   }
 
   static Future<Map<String, dynamic>> getFavSongs() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_liked_songs())
-""");
+    return _call('get_liked_songs', {});
   }
 
   static Future<Map<String, dynamic>> downloadSong(
-      String videoId, String title, String artist, String thumbnailUrl, [String playlistName = '']) async {
-    final b64Title = base64Encode(utf8.encode(title));
-    final b64Artist = base64Encode(utf8.encode(artist));
-    final b64Thumb = base64Encode(utf8.encode(thumbnailUrl));
-    final b64Playlist = base64Encode(utf8.encode(playlistName));
-    return _runCode("""
-import base64
-import echonix_backend
-title = base64.b64decode('$b64Title').decode('utf-8')
-artist = base64.b64decode('$b64Artist').decode('utf-8')
-thumb = base64.b64decode('$b64Thumb').decode('utf-8')
-playlist = base64.b64decode('$b64Playlist').decode('utf-8')
-print(echonix_backend.download_song('$videoId', title, artist, thumb, playlist))
-""");
+    String videoId,
+    String title,
+    String artist,
+    String thumbnailUrl, [
+    String playlistName = '',
+  ]) async {
+    return _call('download_song', {
+      'video_id': videoId,
+      'title': title,
+      'artist': artist,
+      'thumbnail_url': thumbnailUrl,
+      'playlist_name': playlistName,
+    });
   }
 
   static Future<Map<String, dynamic>> getDownloadedSongs() async {
-    return _runCode("""
-import echonix_backend
-print(echonix_backend.get_downloaded_songs())
-""");
+    return _call('get_downloaded_songs', {});
   }
 }
