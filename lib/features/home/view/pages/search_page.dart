@@ -4,7 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/theme/app_pallete.dart';
-import 'package:client/core/widgets/loader.dart';
+import 'package:client/core/theme/glass.dart';
+import 'package:client/core/widgets/skeleton_shimmer.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/core/python_backend.dart';
@@ -300,48 +301,45 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 ),
                 const SizedBox(height: 16),
                 
-                // Search Input Field with Voice option
-                TextField(
-                  controller: _searchController,
-                  focusNode: _focusNode,
-                  onSubmitted: _performSearch,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'What do you want to listen to?',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hasActiveQuery)
+                // Glass Search Input Field with Voice option
+                GlassSurface(
+                  borderRadius: 14,
+                  blurSigma: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _focusNode,
+                    onSubmitted: _performSearch,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'What do you want to listen to?',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      border: InputBorder.none,
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasActiveQuery)
+                            IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchResults = [];
+                                });
+                              },
+                            ),
                           IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.grey),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchResults = [];
-                              });
-                            },
+                            icon: Icon(
+                              _isListening ? CupertinoIcons.mic_fill : CupertinoIcons.mic,
+                              color: _isListening ? Colors.redAccent : Colors.grey,
+                            ),
+                            onPressed: _isListening ? _stopListening : _startListening,
                           ),
-                        IconButton(
-                          icon: Icon(
-                            _isListening ? CupertinoIcons.mic_fill : CupertinoIcons.mic,
-                            color: _isListening ? Colors.redAccent : Colors.grey,
-                          ),
-                          onPressed: _isListening ? _stopListening : _startListening,
-                        ),
-                      ],
-                    ),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.purpleAccent, width: 1.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
-                      borderRadius: BorderRadius.circular(12),
+                        ],
+                      ),
+                      filled: false,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ),
@@ -379,7 +377,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 if (!_isListening)
                   Expanded(
                     child: _isLoading
-                        ? const Loader()
+                        ? const SearchTrendingSkeleton()
                         : _errorMessage.isNotEmpty
                             ? Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.grey)))
                             : hasActiveQuery
@@ -397,7 +395,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget _buildSuggestionsOrResults() {
     if (_searchResults.isNotEmpty) {
       return ListView.builder(
-        padding: const EdgeInsets.only(bottom: 110),
+        padding: const EdgeInsets.only(bottom: 160),
         itemCount: _searchResults.length,
         itemBuilder: (context, index) {
           final song = _searchResults[index];
@@ -453,7 +451,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     // Show suggestions as we type
     return ListView(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       children: [
         // Text completion queries
         if (_textSuggestions.isNotEmpty) ...[
@@ -480,9 +478,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _buildHistoryAndTrending(List<String> history) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       children: [
-        // Recent Searches
+        // Recent Searches as Glass Chips
         if (history.isNotEmpty) ...[
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -500,28 +498,49 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               ),
             ],
           ),
-          ...history.take(5).map((query) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.history, color: Colors.grey),
-                title: Text(query, style: const TextStyle(color: Colors.white)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.grey, size: 18),
-                  onPressed: () {
-                    ref.read(homeLocalRepositoryProvider).removeSearchFromHistory(query);
-                    setState(() {});
-                  },
-                ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: history.take(8).map((query) {
+              return GestureDetector(
                 onTap: () => _performSearch(query),
-              )),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.history, color: Colors.white60, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        query,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () {
+                          ref.read(homeLocalRepositoryProvider).removeSearchFromHistory(query);
+                          setState(() {});
+                        },
+                        child: const Icon(Icons.close, color: Colors.white54, size: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 24),
         ],
 
         // Trending Searches
         if (_loadingTrending)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24.0),
-            child: Center(child: CupertinoActivityIndicator(color: Colors.purpleAccent)),
-          )
+          const SearchTrendingSkeleton()
         else if (_trendingFailed && _trendingSongs.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -548,38 +567,73 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
-            ..._trendingSongs.map((song) => ListTile(
-                  contentPadding: EdgeInsets.zero,
+            const SizedBox(height: 6),
+            GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              itemCount: _trendingSongs.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 2.6,
+              ),
+              itemBuilder: (context, index) {
+                final song = _trendingSongs[index];
+                return GestureDetector(
                   onTap: () {
-                    // Play trending song
                     final model = SongModel.fromBackend(Map<String, dynamic>.from(song), hexCode: 'B388FF');
                     ref.read(currentSongNotifierProvider.notifier).updateSong(model);
                   },
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: CachedNetworkImage(
-                      imageUrl: getHighQualityThumbnail(song['thumbnail'] ?? ''),
-                      width: 44,
-                      height: 44,
-                      memCacheWidth: 88,
-                      fit: BoxFit.cover,
-                      errorWidget: (context, url, error) =>
-                          const Icon(Icons.music_note),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white.withOpacity(0.06)),
+                    ),
+                    padding: const EdgeInsets.all(6),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: CachedNetworkImage(
+                            imageUrl: getHighQualityThumbnail(song['thumbnail'] ?? ''),
+                            width: 44,
+                            height: 44,
+                            memCacheWidth: 88,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, url, error) =>
+                                const Icon(Icons.music_note, color: Colors.white54),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                song['title'] ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                song['artist'] ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.grey, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  title: Text(
-                    song['title'] ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  subtitle: Text(
-                    song['artist'] ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                )),
+                );
+              },
+            ),
             const SizedBox(height: 24),
           ],
 
@@ -591,6 +645,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
+            const SizedBox(height: 6),
             SizedBox(
               height: 160,
               child: ListView.builder(
@@ -618,7 +673,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
                             child: CachedNetworkImage(
                               imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
                               width: 110,
@@ -629,7 +684,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                   const Icon(Icons.album, size: 110, color: Colors.grey),
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
                             album['title'] ?? '',
                             maxLines: 1,

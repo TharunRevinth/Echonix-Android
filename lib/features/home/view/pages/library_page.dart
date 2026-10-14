@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
+import 'package:client/core/theme/glass.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/widgets/loader.dart';
 import 'package:client/core/python_backend.dart';
@@ -57,22 +58,27 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),
-              // Scrolling category selector chips
-              SizedBox(
-                height: 50,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  children: [
-                    _buildTabChip(0, 'Favorites'),
-                    _buildTabChip(1, 'Playlists'),
-                    _buildTabChip(2, 'Downloads'),
-                    _buildTabChip(3, 'Recent'),
-                    _buildTabChip(4, 'History'),
-                    _buildTabChip(5, 'Most Played'),
-                    _buildTabChip(6, 'Saved Albums'),
-                    _buildTabChip(7, 'Followed Artists'),
-                  ],
+              // Glass Pill Segmented Control
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: GlassSurface(
+                  borderRadius: 24,
+                  blurSigma: 18,
+                  padding: const EdgeInsets.all(4),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildTabSegment(0, 'Songs'),
+                        _buildTabSegment(1, 'Playlists'),
+                        _buildTabSegment(2, 'Albums'),
+                        _buildTabSegment(3, 'Artists'),
+                        _buildTabSegment(4, 'Downloads'),
+                        _buildTabSegment(5, 'History'),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               const Divider(color: Colors.white10, height: 1),
@@ -86,27 +92,25 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     );
   }
 
-  Widget _buildTabChip(int index, String label) {
+  Widget _buildTabSegment(int index, String label) {
     final isSelected = _selectedTab == index;
     return GestureDetector(
       onTap: () => setState(() => _selectedTab = index),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Pallete.borderColor : Colors.white.withOpacity(0.05),
+          color: isSelected ? Colors.white.withOpacity(0.18) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.purpleAccent : Colors.white.withOpacity(0.05),
-            width: 1,
-          ),
+          border: isSelected
+              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1)
+              : Border.all(color: Colors.transparent),
         ),
-        alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white,
-            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : Colors.white60,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             fontSize: 13,
           ),
         ),
@@ -121,17 +125,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       case 1:
         return _buildPlaylists();
       case 2:
-        return _buildDownloads();
-      case 3:
-        return _buildRecentlyPlayed();
-      case 4:
-        return _buildPlaybackHistory();
-      case 5:
-        return _buildMostPlayed();
-      case 6:
         return _buildSavedAlbums();
-      case 7:
+      case 3:
         return _buildSavedArtists();
+      case 4:
+        return _buildDownloads();
+      case 5:
+        return _buildPlaybackHistory();
       default:
         return const SizedBox();
     }
@@ -234,7 +234,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return ref.watch(favoriteSongsProvider).when(
           data: (data) {
             return ListView.builder(
-              padding: const EdgeInsets.only(bottom: 110),
+              padding: const EdgeInsets.only(bottom: 160),
               itemCount: data.length + 1,
               itemBuilder: (context, index) {
                 if (index == data.length) {
@@ -311,7 +311,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     final playlists = ref.watch(localPlaylistsProvider);
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       itemCount: playlists.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -450,7 +450,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         final totalItemsCount = playlistKeys.length + individualSongsRaw.length;
 
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 110),
+          padding: const EdgeInsets.only(bottom: 160),
           itemCount: totalItemsCount,
           itemBuilder: (context, index) {
             if (index < playlistKeys.length) {
@@ -587,7 +587,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return const Center(child: Text('No recently played songs', style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
@@ -636,7 +636,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 110),
+            padding: const EdgeInsets.only(bottom: 160),
             itemCount: history.length,
             itemBuilder: (context, index) {
               final item = history[index];
@@ -679,7 +679,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       itemCount: mostPlayed.length,
       itemBuilder: (context, index) {
         final song = mostPlayed[index];
@@ -704,7 +704,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return const Center(child: Text('No saved albums', style: TextStyle(color: Colors.grey)));
     }
     return GridView.builder(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 110),
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 160),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.8,
@@ -768,7 +768,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return const Center(child: Text('No followed artists', style: TextStyle(color: Colors.grey)));
     }
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 110),
+      padding: const EdgeInsets.only(bottom: 160),
       itemCount: artists.length,
       itemBuilder: (context, index) {
         final artist = artists[index];

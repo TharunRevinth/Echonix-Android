@@ -3,6 +3,7 @@ import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/providers/current_user_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/widgets/loader.dart';
+import 'package:client/core/widgets/skeleton_shimmer.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/view/pages/playlist_details_page.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
@@ -473,8 +474,8 @@ class SongsPage extends ConsumerWidget {
                       const Text(
                         'Recently played',
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
                           color: Colors.white,
                           letterSpacing: -0.5,
                         ),
@@ -590,9 +591,8 @@ class SongsPage extends ConsumerWidget {
                           final isSongSection = section['isSongSection'] as bool? ?? false;
                           if (contents.isEmpty) return const SizedBox();
 
-                          // If it is a song section, render in a grid-like horizontal list (like YT Music Quick picks)
+                          // If it is a song section, render as a 2-column grid (Quick picks)
                           if (isSongSection) {
-                            final chunks = _chunkList(contents, 4);
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -601,106 +601,109 @@ class SongsPage extends ConsumerWidget {
                                   child: Text(
                                     title,
                                     style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w600,
                                       color: Colors.white,
                                       letterSpacing: -0.5,
                                     ),
                                   ),
                                 ),
-                                SizedBox(
-                                  height: 260, // Fixed height to fit 4 compact list items
-                                  child: ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: chunks.length,
-                                    padding: const EdgeInsets.only(left: 16.0, right: 8.0),
-                                    itemBuilder: (context, chunkIdx) {
-                                      final chunk = chunks[chunkIdx];
-                                      return Container(
-                                        width: MediaQuery.of(context).size.width * 0.85,
-                                        margin: const EdgeInsets.only(right: 16.0),
-                                        child: Column(
-                                          children: chunk.map((item) {
-                                            final itemTitle = item['title'] as String? ?? '';
-                                            final itemArtist = item['artists'] as String? ?? '';
-                                            final thumb = item['thumbnail'] as String? ?? '';
-                                            final id = item['id'] as String? ?? '';
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  child: GridView.builder(
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    shrinkWrap: true,
+                                    itemCount: contents.length > 8 ? 8 : contents.length,
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 10,
+                                      mainAxisSpacing: 10,
+                                      childAspectRatio: 2.8,
+                                    ),
+                                    itemBuilder: (context, itemIdx) {
+                                      final item = contents[itemIdx];
+                                      final itemTitle = item['title'] as String? ?? '';
+                                      final itemArtist = item['artists'] as String? ?? '';
+                                      final thumb = item['thumbnail'] as String? ?? '';
+                                      final id = item['id'] as String? ?? '';
 
-                                            return GestureDetector(
-                                              onTap: () {
-                                                final List<SongModel> sectionSongs = [];
-                                                int clickedIndex = 0;
-                                                for (final c in contents) {
-                                                  if (c['type'] == 'song') {
-                                                    if (c['id'] == id) {
-                                                      clickedIndex = sectionSongs.length;
-                                                    }
-                                                    sectionSongs.add(
-                                                      SongModel.fromBackend(Map<String, dynamic>.from(c), hexCode: 'B388FF'),
-                                                    );
-                                                  }
-                                                }
-                                                if (sectionSongs.isNotEmpty) {
-                                                  ref.read(currentSongNotifierProvider.notifier).updatePlaylist(
-                                                        sectionSongs,
-                                                        clickedIndex,
-                                                      );
-                                                }
-                                              },
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                                child: Row(
+                                      return GestureDetector(
+                                        onTap: () {
+                                          final List<SongModel> sectionSongs = [];
+                                          int clickedIndex = 0;
+                                          for (final c in contents) {
+                                            if (c['type'] == 'song') {
+                                              if (c['id'] == id) {
+                                                clickedIndex = sectionSongs.length;
+                                              }
+                                              sectionSongs.add(
+                                                SongModel.fromBackend(Map<String, dynamic>.from(c), hexCode: 'B388FF'),
+                                              );
+                                            }
+                                          }
+                                          if (sectionSongs.isNotEmpty) {
+                                            ref.read(currentSongNotifierProvider.notifier).updatePlaylist(
+                                                  sectionSongs,
+                                                  clickedIndex,
+                                                );
+                                          }
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withOpacity(0.05),
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                                          ),
+                                          padding: const EdgeInsets.all(6),
+                                          child: Row(
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: CachedNetworkImage(
+                                                  imageUrl: thumb,
+                                                  width: 48,
+                                                  height: 48,
+                                                  memCacheWidth: 96,
+                                                  fit: BoxFit.cover,
+                                                  errorWidget: (context, url, error) => Container(
+                                                    width: 48,
+                                                    height: 48,
+                                                    color: const Color(0xFF282828),
+                                                    child: const Icon(Icons.music_note, color: Colors.white54, size: 20),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
-                                                    ClipRRect(
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      child: CachedNetworkImage(
-                                                        imageUrl: thumb,
-                                                        width: 50,
-                                                        height: 50,
-                                                        memCacheWidth: 100,
-                                                        fit: BoxFit.cover,
-                                                        errorWidget: (context, url, error) => Container(
-                                                          width: 50,
-                                                          height: 50,
-                                                          color: const Color(0xFF282828),
-                                                          child: const Icon(Icons.music_note, color: Colors.white54),
-                                                        ),
+                                                    Text(
+                                                      itemTitle,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 13,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Text(
-                                                            itemTitle,
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                            style: const TextStyle(
-                                                              color: Colors.white,
-                                                              fontWeight: FontWeight.bold,
-                                                              fontSize: 14,
-                                                            ),
-                                                          ),
-                                                          const SizedBox(height: 2),
-                                                          Text(
-                                                            itemArtist,
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                            style: const TextStyle(
-                                                              color: Colors.grey,
-                                                              fontSize: 12,
-                                                            ),
-                                                          ),
-                                                        ],
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      itemArtist,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 11,
                                                       ),
                                                     ),
-                                                    const Icon(Icons.play_arrow_rounded, color: Colors.white54),
                                                   ],
                                                 ),
                                               ),
-                                            );
-                                          }).toList(),
+                                            ],
+                                          ),
                                         ),
                                       );
                                     },
@@ -710,7 +713,7 @@ class SongsPage extends ConsumerWidget {
                             );
                           }
 
-                          // If it is an Album / Playlist section, render as a horizontal scroll of cards
+                          // If it is an Album / Playlist section, render as a horizontal carousel of 150 px square cards
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -719,15 +722,15 @@ class SongsPage extends ConsumerWidget {
                                 child: Text(
                                   title,
                                   style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.white,
                                     letterSpacing: -0.5,
                                   ),
                                 ),
                               ),
                               SizedBox(
-                                height: 195,
+                                height: 215,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
                                   itemCount: contents.length,
@@ -758,22 +761,31 @@ class SongsPage extends ConsumerWidget {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             ClipRRect(
-                                              borderRadius: BorderRadius.circular(6),
+                                              borderRadius: BorderRadius.circular(14),
                                               child: CachedNetworkImage(
                                                 imageUrl: thumb,
-                                                width: 130,
-                                                height: 130,
-                                                memCacheWidth: 260,
+                                                width: 150,
+                                                height: 150,
+                                                memCacheWidth: 300,
                                                 fit: BoxFit.cover,
-                                                errorWidget: (context, url, error) => const Icon(
-                                                  Icons.music_note,
-                                                  size: 130,
+                                                errorWidget: (context, url, error) => Container(
+                                                  width: 150,
+                                                  height: 150,
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF1E1728),
+                                                    borderRadius: BorderRadius.circular(14),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.music_note,
+                                                    size: 48,
+                                                    color: Colors.white54,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                            const SizedBox(height: 6),
+                                            const SizedBox(height: 8),
                                             SizedBox(
-                                              width: 130,
+                                              width: 150,
                                               child: Text(
                                                 itemTitle,
                                                 maxLines: 1,
@@ -786,7 +798,7 @@ class SongsPage extends ConsumerWidget {
                                               ),
                                             ),
                                             SizedBox(
-                                              width: 130,
+                                              width: 150,
                                               child: Text(
                                                 type.toUpperCase(),
                                                 maxLines: 1,
@@ -826,11 +838,11 @@ class SongsPage extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  loading: () => const SliverFillRemaining(child: Loader()),
+                  loading: () => const SliverToBoxAdapter(child: HomeFeedSkeleton()),
                 ),
             // Bottom space so items aren't hidden by bottom bar & music slab
             const SliverToBoxAdapter(
-              child: SizedBox(height: 110),
+              child: SizedBox(height: 160),
             ),
           ],
         ),

@@ -39,7 +39,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
   List<_LyricLine> _syncedLines = [];
   List<GlobalKey> _lyricKeys = [];
   String _plainLyrics = '';
-  bool _hasSynced = false;
   bool _lyricsLoading = false;
   String? _lyricsLoadedFor;
   final ScrollController _lyricsScroll = ScrollController();
@@ -77,7 +76,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
       setState(() {
         _syncedLines = lines;
         _lyricKeys = List.generate(lines.length, (_) => GlobalKey());
-        _hasSynced = true;
         _lyricsLoading = false;
         _lyricsLoadedFor = songId;
       });
@@ -85,7 +83,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
     } else {
       setState(() {
         _plainLyrics = lyrics;
-        _hasSynced = false;
         _lyricsLoading = false;
         _lyricsLoadedFor = songId;
       });
@@ -101,7 +98,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
       _syncedLines = [];
       _lyricKeys = [];
       _plainLyrics = '';
-      _hasSynced = false;
       _lyricsLoadedFor = songId;
       _lyricsOffsetMs = 0;
     });
@@ -170,7 +166,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
       } else {
         setState(() {
           _lyricsLoading = false;
-          _hasSynced = false;
           _plainLyrics = 'No lyrics found for this song.';
         });
       }
@@ -178,7 +173,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
       if (_lyricsLoadedFor != songId) return;
       setState(() {
         _lyricsLoading = false;
-        _hasSynced = false;
         _plainLyrics = 'Failed to load lyrics.';
       });
     }
@@ -310,10 +304,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
     final hqThumbnail = getHighQualityThumbnail(currentSong.thumbnail_url);
     final dynColor = ref.watch(dominantColorProvider(hqThumbnail)).valueOrNull ??
         hexToColor(currentSong.hex_code);
-
-    final effectsMode = ref.watch(visualEffectsModeProvider);
-    final isReduced = effectsMode == VisualEffectsMode.reduced ||
-        (MediaQuery.maybeOf(context)?.disableAnimations ?? false);
 
     return GestureDetector(
       onVerticalDragUpdate: (details) {

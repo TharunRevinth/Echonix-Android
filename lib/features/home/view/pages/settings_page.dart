@@ -1,7 +1,10 @@
 import 'package:client/core/theme/app_pallete.dart';
+import 'package:client/core/theme/glass.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/sync/sync_service.dart';
+import 'package:client/features/home/repositories/home_local_repository.dart';
+import 'package:client/features/home/view/pages/home_page.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -234,144 +237,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                       const SizedBox(height: 24),
 
-                      if (syncState.reconnectNeeded) ...[
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.amber.withOpacity(0.4)),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Reconnect needed: Your YouTube Music session has expired or requires re-authentication.',
-                                  style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      // 1. YT Music Connection Section
-                      Container(
+                      // 1. Account and sync
+                      GlassSurface(
+                        borderRadius: 16,
+                        blurSigma: 18,
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_isAuthenticated) ...[
-                              const Row(
-                                children: [
-                                  Icon(Icons.check_circle, color: Colors.green, size: 28),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Connected to YouTube Music',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Your personalized home feed, history, likes, and library playlists are now synced.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              const SizedBox(height: 20),
-                              ElevatedButton(
-                                onPressed: _logout,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent,
-                                  minimumSize: const Size(double.infinity, 45),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: const Text('Logout / Disconnect Account', style: TextStyle(color: Colors.white)),
-                              ),
-                            ] else ...[
-                              const Text(
-                                'Connect YouTube Music Account',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Paste your YouTube Music cookie or cURL command below to fetch your personalized music library.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _cookieController,
-                                maxLines: 5,
-                                style: const TextStyle(color: Colors.white),
-                                decoration: InputDecoration(
-                                  hintText: 'Paste cookie string or cURL command here...',
-                                  filled: true,
-                                  fillColor: Pallete.borderColor,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _isConnecting ? null : _saveCredentials,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Pallete.whiteColor,
-                                  foregroundColor: Colors.black,
-                                  minimumSize: const Size(double.infinity, 48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: _isConnecting
-                                    ? const CircularProgressIndicator(color: Colors.black)
-                                    : const Text('Connect Account', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              if (_message.isNotEmpty) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  _message,
-                                  style: TextStyle(
-                                    color: _message.contains('success') || _message.contains('Connected')
-                                        ? Colors.green
-                                        : Colors.redAccent,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Sync & Outbox Section
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -380,10 +250,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               children: [
                                 const Row(
                                   children: [
-                                    Icon(Icons.sync, color: Colors.blueAccent, size: 24),
+                                    Icon(Icons.sync_rounded, color: Colors.blueAccent, size: 24),
                                     SizedBox(width: 8),
                                     Text(
-                                      'Account & Cloud Sync',
+                                      'Account and sync',
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
@@ -401,6 +271,129 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               ],
                             ),
                             const SizedBox(height: 12),
+
+                            if (syncState.reconnectNeeded) ...[
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Reconnect needed: Your YouTube Music session has expired or requires re-authentication.',
+                                        style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            if (_isAuthenticated) ...[
+                              const Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green, size: 24),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Connected to YouTube Music',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Your personalized home feed, history, likes, and library playlists are now synced.',
+                                style: TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _logout,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent,
+                                  minimumSize: const Size(double.infinity, 42),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: const Text('Logout / Disconnect Account', style: TextStyle(color: Colors.white)),
+                              ),
+                            ] else ...[
+                              const Text(
+                                'Connect YouTube Music Account',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Paste your YouTube Music cookie or cURL command below to fetch your personalized music library.',
+                                style: TextStyle(color: Colors.grey, fontSize: 13),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _cookieController,
+                                maxLines: 4,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  hintText: 'Paste cookie string or cURL command here...',
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.05),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _isConnecting ? null : _saveCredentials,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Pallete.whiteColor,
+                                  foregroundColor: Colors.black,
+                                  minimumSize: const Size(double.infinity, 44),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: _isConnecting
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
+                                      )
+                                    : const Text('Connect Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              if (_message.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _message,
+                                  style: TextStyle(
+                                    color: _message.contains('success') || _message.contains('Connected')
+                                        ? Colors.green
+                                        : Colors.redAccent,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ],
+
+                            const Divider(color: Colors.white10, height: 28),
+
+                            // Sync controls
                             Text(
                               'Last sync: ${syncState.lastSyncTime != null ? _formatDateTime(syncState.lastSyncTime!) : 'Never'}',
                               style: const TextStyle(color: Colors.grey, fontSize: 13),
@@ -417,7 +410,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
                               ),
                             ],
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
                             Row(
                               children: [
                                 Expanded(
@@ -462,30 +455,73 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
 
-                      // 2. Sleep Timer / Bedtime Mode Section
-                      Container(
+                      // 2. Playback
+                      GlassSurface(
+                        borderRadius: 16,
+                        blurSigma: 18,
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.play_circle_outline_rounded, color: Colors.blueAccent, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Playback',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Autoplay toggle
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Queue Autoplay Prediction',
+                                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Continues playback with predicted similar tracks',
+                                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: ref.watch(autoplayEnabledProvider),
+                                  activeColor: Colors.purpleAccent,
+                                  onChanged: (val) {
+                                    ref.read(autoplayEnabledProvider.notifier).toggle();
+                                  },
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Colors.white10, height: 24),
+                            // Bedtime Mode (Sleep Timer)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Row(
                                   children: [
-                                    Icon(Icons.bedtime_outlined, color: Colors.blueAccent, size: 24),
+                                    Icon(Icons.bedtime_outlined, color: Colors.blueAccent, size: 20),
                                     SizedBox(width: 8),
                                     Text(
                                       'Bedtime Mode (Sleep Timer)',
                                       style: TextStyle(
-                                        fontSize: 16,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: Colors.white,
                                       ),
@@ -510,12 +546,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             const Text(
                               'Set a timer to automatically pause music playback when you fall asleep.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -535,108 +571,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
                       const SizedBox(height: 24),
 
-                      // 3. Audio Enhancement (Spatial Stereo & Bass) Section
-                      Container(
+                      // 3. Audio/EQ
+                      GlassSurface(
+                        borderRadius: 16,
+                        blurSigma: 18,
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.spatial_audio_off_outlined, color: Colors.tealAccent, size: 24),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Spatial Stereo & Bass Boost',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Enhance your listening experience with native spatial stereo virtualization and hardware-accelerated bass boost.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Bass Boost Slider
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.speaker_group_outlined, color: Colors.tealAccent.withOpacity(0.8), size: 20),
-                                    const SizedBox(width: 8),
-                                    const Text('Hardware Bass Boost', style: TextStyle(color: Colors.white, fontSize: 14)),
-                                  ],
-                                ),
-                                Text(
-                                  '${(eqSettings.bassBoostStrength / 10).toStringAsFixed(0)}%',
-                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            Slider(
-                              value: eqSettings.bassBoostStrength.toDouble(),
-                              min: 0,
-                              max: 1000,
-                              activeColor: Colors.tealAccent,
-                              inactiveColor: Colors.white12,
-                              onChanged: (val) {
-                                ref.read(equalizerProvider.notifier).setBassBoostStrength(val.toInt());
-                              },
-                            ),
-                            const SizedBox(height: 8),
-
-                            // Spatial Stereo (Virtualizer) Slider
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.graphic_eq_outlined, color: Colors.tealAccent.withOpacity(0.8), size: 20),
-                                    const SizedBox(width: 8),
-                                    const Text('Stereo Widening (3D Spatial)', style: TextStyle(color: Colors.white, fontSize: 14)),
-                                  ],
-                                ),
-                                Text(
-                                  '${(eqSettings.virtualizerStrength / 10).toStringAsFixed(0)}%',
-                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            Slider(
-                              value: eqSettings.virtualizerStrength.toDouble(),
-                              min: 0,
-                              max: 1000,
-                              activeColor: Colors.tealAccent,
-                              inactiveColor: Colors.white12,
-                              onChanged: (val) {
-                                ref.read(equalizerProvider.notifier).setVirtualizerStrength(val.toInt());
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // 4. Audio Equalizer Section
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -645,12 +584,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               children: [
                                 const Row(
                                   children: [
-                                    Icon(Icons.equalizer, color: Colors.purpleAccent, size: 24),
+                                    Icon(Icons.equalizer_rounded, color: Colors.purpleAccent, size: 24),
                                     SizedBox(width: 8),
                                     Text(
-                                      'Audio Equalizer',
+                                      'Audio & Equalizer',
                                       style: TextStyle(
-                                        fontSize: 16,
+                                        fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                         color: Colors.white,
                                       ),
@@ -674,7 +613,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             if (eqSettings.enabled) ...[
                               const SizedBox(height: 16),
 
-                              // Interactive Bezier Curve EQ widget (Spotify style!)
+                              // Interactive Bezier Curve EQ widget
                               const Text(
                                 'Interactive Curve Control (Drag to adjust)',
                                 style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
@@ -788,6 +727,267 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 );
                               }),
                             ],
+
+                            const Divider(color: Colors.white10, height: 28),
+
+                            // Spatial Stereo & Bass Boost Section
+                            const Row(
+                              children: [
+                                Icon(Icons.spatial_audio_off_outlined, color: Colors.tealAccent, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Spatial Stereo & Bass Boost',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Hardware-accelerated bass boost and native spatial virtualizer.',
+                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Bass Boost Slider
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Hardware Bass Boost', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                Text(
+                                  '${(eqSettings.bassBoostStrength / 10).toStringAsFixed(0)}%',
+                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: eqSettings.bassBoostStrength.toDouble(),
+                              min: 0,
+                              max: 1000,
+                              activeColor: Colors.tealAccent,
+                              inactiveColor: Colors.white12,
+                              onChanged: (val) {
+                                ref.read(equalizerProvider.notifier).setBassBoostStrength(val.toInt());
+                              },
+                            ),
+
+                            // Spatial Stereo Slider
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Stereo Widening (3D Spatial)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                Text(
+                                  '${(eqSettings.virtualizerStrength / 10).toStringAsFixed(0)}%',
+                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: eqSettings.virtualizerStrength.toDouble(),
+                              min: 0,
+                              max: 1000,
+                              activeColor: Colors.tealAccent,
+                              inactiveColor: Colors.white12,
+                              onChanged: (val) {
+                                ref.read(equalizerProvider.notifier).setVirtualizerStrength(val.toInt());
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 4. Appearance
+                      GlassSurface(
+                        borderRadius: 16,
+                        blurSigma: 18,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.palette_outlined, color: Colors.purpleAccent, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Appearance',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Customize blur shaders, backdrop filters, and visual responsiveness.',
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.full);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
+                                            ? Colors.white.withOpacity(0.18)
+                                            : Colors.white.withOpacity(0.04),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
+                                              ? Colors.purpleAccent
+                                              : Colors.white.withOpacity(0.06),
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.blur_on_rounded,
+                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
+                                                ? Colors.purpleAccent
+                                                : Colors.grey,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Full Glass',
+                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Blurs & Springs',
+                                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.reduced);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
+                                            ? Colors.white.withOpacity(0.18)
+                                            : Colors.white.withOpacity(0.04),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
+                                              ? Colors.purpleAccent
+                                              : Colors.white.withOpacity(0.06),
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.blur_off_rounded,
+                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
+                                                ? Colors.purpleAccent
+                                                : Colors.grey,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Reduced',
+                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Battery Saver',
+                                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 5. Storage and downloads
+                      GlassSurface(
+                        borderRadius: 16,
+                        blurSigma: 18,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.storage_rounded, color: Colors.amberAccent, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Storage and downloads',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Manage offline audio files, cached album covers, and temporary listening signals.',
+                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      ref.read(homeTabIndexProvider.notifier).state = 2; // Jump to Library
+                                    },
+                                    icon: const Icon(Icons.download_done_rounded, size: 18),
+                                    label: const Text('Manage Downloads'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white,
+                                      side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      PaintingBinding.instance.imageCache.clear();
+                                      PaintingBinding.instance.imageCache.clearLiveImages();
+                                      ref.read(homeLocalRepositoryProvider).clearSearchHistory();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Memory and search caches cleared successfully.')),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                                    label: const Text('Clear Caches'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.amberAccent,
+                                      side: const BorderSide(color: Colors.amberAccent),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
