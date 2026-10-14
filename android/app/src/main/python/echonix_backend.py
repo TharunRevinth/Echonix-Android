@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import urllib.request
 import urllib.parse
 import re
@@ -426,44 +427,103 @@ def get_lyrics(title, artist):
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
-def get_stream_url(video_id):
+def resolve_stream(video_id):
     global ytm_cache_path
     try:
-        dl_dir = os.path.join(ytm_cache_path, "downloads")
-        if os.path.exists(dl_dir):
-            for file in os.listdir(dl_dir):
-                if file.endswith(".json"):
-                    meta_path = os.path.join(dl_dir, file)
-                    try:
-                        with open(meta_path, 'r') as f:
-                            data = json.load(f)
-                        if data.get('id') == video_id:
-                            mp3_path = meta_path.replace(".json", "")
-                            if os.path.exists(mp3_path):
-                                return json.dumps({"success": True, "url": mp3_path, "ext": "mp3"})
-                    except:
-                        pass
+        # Check offline file
+        if ytm_cache_path:
+            dl_dir = os.path.join(ytm_cache_path, "downloads")
+            # 1. New naming scheme: {video_id}.m4a
+            new_path = os.path.join(dl_dir, f"{video_id}.m4a")
+            if os.path.exists(new_path) and os.path.getsize(new_path) > 1000:
+                return json.dumps({
+                    "success": True,
+                    "url": new_path,
+                    "ext": "m4a",
+                    "headers": {},
+                    "expires_at": int(time.time()) + 86400 * 365,
+                    "is_local": True
+                })
+            # 2. Legacy check:
+            if os.path.exists(dl_dir):
+                for file in os.listdir(dl_dir):
+                    if file.endswith(".json"):
+                        meta_path = os.path.join(dl_dir, file)
+                        try:
+                            with open(meta_path, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                            if data.get('id') == video_id:
+                                mp3_path = meta_path.replace(".json", "")
+                                if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 1000:
+                                    ext = "m4a" if mp3_path.endswith(".m4a") else "mp3"
+                                    return json.dumps({
+                                        "success": True,
+                                        "url": mp3_path,
+                                        "ext": ext,
+                                        "headers": {},
+                                        "expires_at": int(time.time()) + 86400 * 365,
+                                        "is_local": True
+                                    })
+                        except:
+                            pass
 
+        opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio',
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'socket_timeout': 30,
+            'geo_bypass': True,
+            'nocheckcertificate': True,
+            'http_headers': {
+                'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+            },
+            'extractor_args': {
+                'youtube': {'player_client': ['android_vr']}
+            }
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
+            stream_url = info.get('url')
+            if not stream_url:
+                formats = info.get('formats') or []
+                for f in reversed(formats):
+                    if f.get('vcodec') == 'none' and f.get('url'):
+                        stream_url = f.get('url')
+                        break
+            if not stream_url:
+                return json.dumps({"success": False, "error": "No stream URL found."})
+
+            ext = info.get('ext', 'm4a')
+            headers = info.get('http_headers', {})
+            expires_at = int(time.time()) + 1800
+            try:
+                parsed_url = urllib.parse.urlparse(stream_url)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                if 'expire' in params:
+                    expires_at = int(params['expire'][0]) - 300
+            except:
+                pass
+
+            return json.dumps({
+                "success": True,
+                "url": stream_url,
+                "ext": ext,
+                "headers": headers,
+                "expires_at": expires_at,
+                "is_local": False
+            })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+def resolve_stream_download(video_id):
+    global ytm_cache_path
+    try:
         tmp_dir = os.path.join(ytm_cache_path, "tmp_audio")
         os.makedirs(tmp_dir, exist_ok=True)
-        for ext_try in ['m4a', 'webm', 'opus', 'mp4']:
-            cached = os.path.join(tmp_dir, f"{video_id}.{ext_try}")
-            if os.path.exists(cached) and os.path.getsize(cached) > 10000:
-                return json.dumps({"success": True, "url": cached, "ext": ext_try})
-
-        try:
-            files = sorted(
-                [os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir)],
-                key=os.path.getmtime
-            )
-            while len(files) > 3:
-                os.remove(files.pop(0))
-        except:
-            pass
-
         out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
         opts = {
-            'format': '251/140/bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio',
             'outtmpl': out_tmpl,
             'quiet': True,
             'no_warnings': True,
@@ -475,7 +535,7 @@ def get_stream_url(video_id):
                 'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
             },
             'extractor_args': {
-                'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
+                'youtube': {'player_client': ['android_vr']}
             }
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -483,10 +543,21 @@ def get_stream_url(video_id):
             ext = info.get('ext', 'm4a')
             final_path = os.path.join(tmp_dir, f"{video_id}.{ext}")
             if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
-                return json.dumps({"success": True, "url": final_path, "ext": ext})
+                return json.dumps({
+                    "success": True,
+                    "url": final_path,
+                    "ext": ext,
+                    "headers": {},
+                    "expires_at": int(time.time()) + 86400 * 365,
+                    "is_local": True
+                })
             return json.dumps({"success": False, "error": "Download produced empty file."})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
+
+def get_stream_url(video_id):
+    return resolve_stream(video_id)
+
 
 def rate_song(video_id, rating):
     global ytm
@@ -720,6 +791,8 @@ WHITELIST = {
     'get_album_details': get_album_details,
     'get_lyrics': get_lyrics,
     'get_stream_url': get_stream_url,
+    'resolve_stream': resolve_stream,
+    'resolve_stream_download': resolve_stream_download,
     'rate_song': rate_song,
     'add_history': add_history,
     'get_liked_songs': get_liked_songs,

@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/core/python_backend.dart';
@@ -14,75 +16,284 @@ part 'current_song_notifier.g.dart';
 
 final shuffleProvider = StateProvider<bool>((ref) => false);
 
+class _StreamCacheEntry {
+  final String url;
+  final String ext;
+  final Map<String, String> headers;
+  final DateTime expiresAt;
+  final bool isLocal;
+
+  _StreamCacheEntry({
+    required this.url,
+    required this.ext,
+    required this.headers,
+    required this.expiresAt,
+    required this.isLocal,
+  });
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
+
 class LocalRedirectServer {
   HttpServer? _server;
   int get port => _server?.port ?? 8080;
-  
-  // Cache for resolved stream URLs to make seeking instantaneous
-  final Map<String, _CachedUrl> _cache = {};
+  final String serverToken = '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1000000)}';
+
+  final Map<String, _StreamCacheEntry> _cache = {};
+  final HttpClient _httpClient = HttpClient()..autoUncompress = false;
 
   Future<void> start() async {
     try {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       _server!.listen((HttpRequest request) async {
-        final videoId = request.uri.queryParameters['id'];
-        if (videoId == null || videoId.isEmpty) {
-          request.response.statusCode = HttpStatus.notFound;
-          await request.response.close();
-          return;
+        try {
+          await _handleRequest(request);
+        } catch (_) {
+          // Seek/skip cancellations or socket closures must not throw to zone
         }
+      }, onError: (_) {});
+    } catch (e, st) {
+      debugPrint("LocalRedirectServer Bind Error: $e\n$st");
+    }
+  }
 
-        // Check cache first
-        final cached = _cache[videoId];
-        if (cached != null && DateTime.now().isBefore(cached.expiry)) {
-          final url = cached.url;
-          if (url.startsWith('/')) {
-            final file = File(url);
-            if (await file.exists()) {
-              request.response.headers.contentType = ContentType('audio', 'mpeg');
-              await file.openRead().pipe(request.response);
-              return;
-            }
-          } else {
-            request.response.statusCode = HttpStatus.movedTemporarily;
-            request.response.headers.set(HttpHeaders.locationHeader, url);
-            await request.response.close();
-            return;
+  void prefetch(String videoId) {
+    if (videoId.isEmpty) return;
+    final cached = _cache[videoId];
+    if (cached != null && !cached.isExpired) return;
+
+    PythonBackend.resolveStream(videoId, lane: 'background').then((res) {
+      if (res['success'] == true) {
+        final url = res['url'] as String?;
+        if (url != null && url.isNotEmpty) {
+          final ext = res['ext'] as String? ?? 'm4a';
+          final rawHeaders = res['headers'];
+          final headers = <String, String>{};
+          if (rawHeaders is Map) {
+            rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
           }
+          final expiresEpoch = (res['expires_at'] as num?)?.toInt() ??
+              (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
+          final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
+          final isLocal = res['is_local'] == true || url.startsWith('/');
+          _cache[videoId] = _StreamCacheEntry(
+            url: url,
+            ext: ext,
+            headers: headers,
+            expiresAt: expiresAt,
+            isLocal: isLocal,
+          );
         }
+      }
+    }).catchError((_) {});
+  }
 
-        // Fetch stream URL from YT Music python backend
-        final res = await PythonBackend.getStreamUrl(videoId);
-        if (res['success'] == true) {
-          final url = res['url'] as String?;
-          if (url != null && url.isNotEmpty) {
-            // Cache the url for 1 hour
-            _cache[videoId] = _CachedUrl(url, DateTime.now().add(const Duration(hours: 1)));
+  Future<void> _handleRequest(HttpRequest request) async {
+    final token = request.uri.queryParameters['t'];
+    if (token != serverToken) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
 
-            if (url.startsWith('/')) {
-              // Local file: serve directly
-              final file = File(url);
-              if (await file.exists()) {
-                request.response.headers.contentType = ContentType('audio', 'mpeg');
-                await file.openRead().pipe(request.response);
-                return;
-              }
-            } else {
-              // Remote stream: 302 redirect
-              request.response.statusCode = HttpStatus.movedTemporarily;
-              request.response.headers.set(HttpHeaders.locationHeader, url);
-              await request.response.close();
-              return;
-            }
-          }
+    final videoId = request.uri.queryParameters['id'];
+    if (videoId == null || videoId.isEmpty) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      return;
+    }
+
+    _StreamCacheEntry? entry = _cache[videoId];
+    if (entry != null && entry.isExpired) {
+      _cache.remove(videoId);
+      entry = null;
+    }
+
+    final sw = Stopwatch()..start();
+
+    if (entry == null) {
+      final res = await PythonBackend.resolveStream(videoId, lane: 'priority');
+      if (res['success'] == true && res['url'] != null) {
+        final url = res['url'] as String;
+        final ext = res['ext'] as String? ?? 'm4a';
+        final rawHeaders = res['headers'];
+        final headers = <String, String>{};
+        if (rawHeaders is Map) {
+          rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
         }
+        final expiresEpoch = (res['expires_at'] as num?)?.toInt() ??
+            (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
+        final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
+        final isLocal = res['is_local'] == true || url.startsWith('/');
+        entry = _StreamCacheEntry(
+          url: url,
+          ext: ext,
+          headers: headers,
+          expiresAt: expiresAt,
+          isLocal: isLocal,
+        );
+        _cache[videoId] = entry;
+        debugPrint('[Echonix][stream] resolve id=$videoId mode=direct ms=${sw.elapsedMilliseconds}');
+      }
+    }
 
+    if (entry == null) {
+      entry = await _fallbackDownload(videoId, sw);
+    }
+
+    if (entry == null) {
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+      return;
+    }
+
+    if (entry.isLocal || entry.url.startsWith('/')) {
+      await _serveLocalFile(request, File(entry.url));
+      return;
+    }
+
+    bool proxySuccess = await _proxyRemoteStream(request, videoId, entry, sw);
+    if (!proxySuccess) {
+      final fallbackEntry = await _fallbackDownload(videoId, sw);
+      if (fallbackEntry != null && fallbackEntry.isLocal) {
+        await _serveLocalFile(request, File(fallbackEntry.url));
+      } else {
         request.response.statusCode = HttpStatus.internalServerError;
         await request.response.close();
-      });
-    } catch (e, st) {
-      print("LocalRedirectServer Bind Error: $e");
-      print(st);
+      }
+    }
+  }
+
+  Future<_StreamCacheEntry?> _fallbackDownload(String videoId, Stopwatch sw) async {
+    final dlRes = await PythonBackend.resolveStreamDownload(videoId, lane: 'priority');
+    if (dlRes['success'] == true && dlRes['url'] != null) {
+      final url = dlRes['url'] as String;
+      final ext = dlRes['ext'] as String? ?? 'm4a';
+      final entry = _StreamCacheEntry(
+        url: url,
+        ext: ext,
+        headers: {},
+        expiresAt: DateTime.now().add(const Duration(days: 365)),
+        isLocal: true,
+      );
+      _cache[videoId] = entry;
+      debugPrint('[Echonix][stream] resolve id=$videoId mode=fallback ms=${sw.elapsedMilliseconds}');
+      return entry;
+    }
+    return null;
+  }
+
+  Future<bool> _proxyRemoteStream(
+    HttpRequest request,
+    String videoId,
+    _StreamCacheEntry entry,
+    Stopwatch sw,
+  ) async {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final upstreamUri = Uri.parse(entry.url);
+        final upstreamReq = await _httpClient.getUrl(upstreamUri);
+
+        entry.headers.forEach((k, v) {
+          if (k.toLowerCase() != 'host') {
+            upstreamReq.headers.set(k, v);
+          }
+        });
+
+        final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+        if (rangeHeader != null) {
+          upstreamReq.headers.set(HttpHeaders.rangeHeader, rangeHeader);
+        }
+
+        final upstreamResp = await upstreamReq.close();
+
+        if (upstreamResp.statusCode == HttpStatus.forbidden ||
+            upstreamResp.statusCode == HttpStatus.gone ||
+            upstreamResp.statusCode >= 400) {
+          upstreamResp.drain().catchError((_) {});
+          _cache.remove(videoId);
+          if (attempt == 0) {
+            final reRes = await PythonBackend.resolveStream(videoId, lane: 'priority');
+            if (reRes['success'] == true && reRes['url'] != null) {
+              final newUrl = reRes['url'] as String;
+              final ext = reRes['ext'] as String? ?? 'm4a';
+              final rawHeaders = reRes['headers'];
+              final headers = <String, String>{};
+              if (rawHeaders is Map) {
+                rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
+              }
+              final expiresEpoch = (reRes['expires_at'] as num?)?.toInt() ??
+                  (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
+              final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
+              entry = _StreamCacheEntry(
+                url: newUrl,
+                ext: ext,
+                headers: headers,
+                expiresAt: expiresAt,
+                isLocal: false,
+              );
+              _cache[videoId] = entry;
+              continue;
+            }
+          }
+          return false;
+        }
+
+        request.response.statusCode = upstreamResp.statusCode;
+        upstreamResp.headers.forEach((name, values) {
+          final lower = name.toLowerCase();
+          if (lower == 'content-type' ||
+              lower == 'content-length' ||
+              lower == 'content-range' ||
+              lower == 'accept-ranges') {
+            for (final v in values) {
+              request.response.headers.add(name, v);
+            }
+          }
+        });
+
+        await upstreamResp.pipe(request.response);
+        return true;
+      } catch (e) {
+        if (e is SocketException || e is HttpException) {
+          return true;
+        }
+        return false;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _serveLocalFile(HttpRequest request, File file) async {
+    if (!await file.exists()) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      return;
+    }
+
+    final length = await file.length();
+    request.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+    final ext = file.path.endsWith('.mp3') ? 'mpeg' : 'mp4';
+    request.response.headers.contentType = ContentType('audio', ext);
+
+    final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+    if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+      final parts = rangeHeader.substring(6).split('-');
+      final start = int.tryParse(parts[0]) ?? 0;
+      final end = parts.length > 1 && parts[1].isNotEmpty
+          ? int.tryParse(parts[1]) ?? (length - 1)
+          : (length - 1);
+      final clampedEnd = end.clamp(start, length - 1);
+      final chunkSize = clampedEnd - start + 1;
+
+      request.response.statusCode = HttpStatus.partialContent;
+      request.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$clampedEnd/$length');
+      request.response.headers.contentLength = chunkSize;
+      await file.openRead(start, clampedEnd + 1).pipe(request.response);
+    } else {
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentLength = length;
+      await file.openRead().pipe(request.response);
     }
   }
 
@@ -93,11 +304,6 @@ class LocalRedirectServer {
   }
 }
 
-class _CachedUrl {
-  final String url;
-  final DateTime expiry;
-  _CachedUrl(this.url, this.expiry);
-}
 
 @Riverpod(keepAlive: true)
 class CurrentSongNotifier extends _$CurrentSongNotifier {
@@ -192,6 +398,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         PythonBackend.addHistory(song.id);
         ref.invalidate(recentlyPlayedProvider);
         ref.invalidate(listeningHistoryProvider);
+
+        final nextIndex = index + 1;
+        if (nextIndex < playlist.length) {
+          _redirectServer?.prefetch(playlist[nextIndex].id);
+        }
       }
     });
 
@@ -219,7 +430,8 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     } else {
       if (song.id.length == 11) {
         final port = _redirectServer?.port ?? 8080;
-        final localUrl = 'http://127.0.0.1:$port/play?id=${song.id}';
+        final token = _redirectServer?.serverToken ?? '';
+        final localUrl = 'http://127.0.0.1:$port/play?id=${song.id}&t=$token';
         return AudioSource.uri(
           Uri.parse(localUrl),
           tag: tag,
