@@ -250,6 +250,7 @@ class SongsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugPrint('[Echonix] 10. SongsPage build() entered');
     final recentlyPlayedSongs = ref.watch(homeLocalRepositoryProvider).loadSongs();
     final ytmConnected = ref.watch(isYTMConnectedProvider).value ?? false;
     final currentUser = ref.watch(currentUserNotifierProvider);

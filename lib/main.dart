@@ -7,21 +7,28 @@ import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() async {
+  debugPrint('[Echonix] 1. main() invoked');
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('[Echonix] 2. WidgetsFlutterBinding initialized');
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
     debugPrint('[Echonix][Error] ${details.exceptionAsString()} \n${details.stack}');
   };
 
+  debugPrint('[Echonix] 3. calling getApplicationDocumentsDirectory()');
   final dir = await getApplicationDocumentsDirectory();
+  debugPrint('[Echonix] 4. getApplicationDocumentsDirectory resolved: ${dir.path}');
   Hive.defaultDirectory = dir.path;
+  debugPrint('[Echonix] 5. Hive.defaultDirectory set');
 
+  debugPrint('[Echonix] 6. calling runApp()');
   runApp(
     const ProviderScope(
       child: MyApp(),
     ),
   );
+  debugPrint('[Echonix] 7. runApp() completed');
 }
 
 class MyApp extends ConsumerWidget {
@@ -29,6 +36,7 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugPrint('[Echonix] 8. MyApp build() entered');
     // Eagerly trigger bootstrap on first frame
     ref.watch(bootstrapProvider);
 
