@@ -9,6 +9,11 @@ import 'package:path_provider/path_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[Echonix][Error] ${details.exceptionAsString()} \n${details.stack}');
+  };
+
   final dir = await getApplicationDocumentsDirectory();
   Hive.defaultDirectory = dir.path;
 

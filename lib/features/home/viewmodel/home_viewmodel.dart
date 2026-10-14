@@ -115,13 +115,11 @@ class GetHomeFeedSections extends _$GetHomeFeedSections {
 
 @riverpod
 class HomeViewModel extends _$HomeViewModel {
-  late HomeRepository _homeRepository;
-  late HomeLocalRepository _homeLocalRepository;
+  HomeRepository get _homeRepository => ref.read(homeRepositoryProvider);
+  HomeLocalRepository get _homeLocalRepository => ref.read(homeLocalRepositoryProvider);
 
   @override
   AsyncValue? build() {
-    _homeRepository = ref.watch(homeRepositoryProvider);
-    _homeLocalRepository = ref.watch(homeLocalRepositoryProvider);
     return null;
   }
 

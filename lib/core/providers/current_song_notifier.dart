@@ -342,7 +342,7 @@ class LocalRedirectServer {
 
 @Riverpod(keepAlive: true)
 class CurrentSongNotifier extends _$CurrentSongNotifier {
-  late HomeLocalRepository _homeLocalRepository;
+  HomeLocalRepository get _homeLocalRepository => ref.read(homeLocalRepositoryProvider);
   AudioPlayer? audioPlayer;
   AndroidEqualizer? _equalizer;
   bool isPlaying = false;
@@ -486,7 +486,6 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
   @override
   SongModel? build() {
-    _homeLocalRepository = ref.watch(homeLocalRepositoryProvider);
     _initRedirectServer();
     _initAudioPlayer();
     ref.onDispose(() {
