@@ -53,11 +53,10 @@ flutter {
 chaquopy {
     defaultConfig {
         version = "3.11"
-        buildPython("/home/cybernode/Projects/echonix-python-android/.venv/bin/python3")
+        buildPython(providers.gradleProperty("echonix.buildPython").orNull ?: "python3")
         pip {
-            install("ytmusicapi")
-            install("yt-dlp")
-            install("mutagen")
+            install("ytmusicapi==1.12.1")
+            install("yt-dlp==2026.7.4")
         }
     }
 }
