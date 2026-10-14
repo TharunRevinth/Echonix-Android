@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/widgets/loader.dart';
@@ -93,12 +94,13 @@ class PlaylistDetailsPage extends ConsumerWidget {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              thumbnailUrl,
+                            child: CachedNetworkImage(
+                              imageUrl: thumbnailUrl,
                               width: 200,
                               height: 200,
+                              memCacheWidth: 400,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
+                              errorWidget: (context, url, error) =>
                                   const Icon(Icons.music_note, size: 100),
                             ),
                           ),

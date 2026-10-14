@@ -1,43 +1,19 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/providers/current_user_notifier.dart';
+import 'package:client/core/providers/dominant_color_provider.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/features/home/view/widgets/music_player.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:palette_generator/palette_generator.dart';
 
-class MusicSlab extends ConsumerStatefulWidget {
+class MusicSlab extends ConsumerWidget {
   const MusicSlab({super.key});
 
   @override
-  ConsumerState<MusicSlab> createState() => _MusicSlabState();
-}
-
-class _MusicSlabState extends ConsumerState<MusicSlab> {
-  Color? _extractedColor;
-  String? _loadedImageUrl;
-
-  void _extractColor(String imageUrl) async {
-    if (_loadedImageUrl == imageUrl) return;
-    _loadedImageUrl = imageUrl;
-    try {
-      final provider = NetworkImage(imageUrl);
-      final palette = await PaletteGenerator.fromImageProvider(
-        provider,
-        maximumColorCount: 3,
-      );
-      if (mounted && palette.dominantColor != null) {
-        setState(() {
-          _extractedColor = palette.dominantColor!.color;
-        });
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final currentSong = ref.watch(currentSongNotifierProvider);
     final songNotifier = ref.read(currentSongNotifierProvider.notifier);
     final userFavorites = ref.watch(
@@ -48,11 +24,8 @@ class _MusicSlabState extends ConsumerState<MusicSlab> {
       return const SizedBox();
     }
 
-    if (_loadedImageUrl != currentSong.thumbnail_url) {
-      _extractedColor = null;
-      _extractColor(currentSong.thumbnail_url);
-    }
-    final baseColor = _extractedColor ?? hexToColor(currentSong.hex_code);
+    final dominantColorAsync = ref.watch(dominantColorProvider(currentSong.thumbnail_url));
+    final baseColor = dominantColorAsync.valueOrNull ?? hexToColor(currentSong.hex_code);
 
     return GestureDetector(
       onTap: () {
@@ -108,15 +81,20 @@ class _MusicSlabState extends ConsumerState<MusicSlab> {
                 children: [
                   Hero(
                     tag: 'music-image',
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        image: DecorationImage(
-                          image: NetworkImage(currentSong.thumbnail_url),
-                          fit: BoxFit.cover,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: currentSong.thumbnail_url,
+                        width: 48,
+                        height: 48,
+                        memCacheWidth: 96,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) => Container(
+                          width: 48,
+                          height: 48,
+                          color: const Color(0xFF212121),
+                          child: const Icon(Icons.music_note, color: Colors.white54),
                         ),
-                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                   ),

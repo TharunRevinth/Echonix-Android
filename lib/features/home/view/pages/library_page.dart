@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/utils.dart';
@@ -255,12 +255,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   },
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      getHighQualityThumbnail(song.thumbnail_url),
+                    child: CachedNetworkImage(
+                      imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                       width: 50,
                       height: 50,
+                      memCacheWidth: 100,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
+                      errorWidget: (context, url, error) =>
                           const Icon(Icons.music_note, size: 50),
                     ),
                   ),
@@ -446,7 +447,19 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: firstSongThumb.isNotEmpty
-                      ? Image.network(firstSongThumb, width: 50, height: 50, fit: BoxFit.cover)
+                      ? CachedNetworkImage(
+                          imageUrl: firstSongThumb,
+                          width: 50,
+                          height: 50,
+                          memCacheWidth: 100,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, url, error) => Container(
+                            width: 50,
+                            height: 50,
+                            color: Colors.white.withOpacity(0.05),
+                            child: const Icon(Icons.playlist_play, color: Colors.white70),
+                          ),
+                        )
                       : Container(
                           width: 50,
                           height: 50,
@@ -490,12 +503,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               return ListTile(
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    getHighQualityThumbnail(song.thumbnail_url),
+                  child: CachedNetworkImage(
+                    imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                     width: 50,
                     height: 50,
+                    memCacheWidth: 100,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.music_note, size: 50),
+                    errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 50),
                   ),
                 ),
                 title: Row(
@@ -577,7 +591,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         return ListTile(
           leading: ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: Image.network(getHighQualityThumbnail(song.thumbnail_url), width: 44, height: 44, fit: BoxFit.cover),
+            child: CachedNetworkImage(
+              imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+              width: 44,
+              height: 44,
+              memCacheWidth: 88,
+              fit: BoxFit.cover,
+              errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 44),
+            ),
           ),
           title: Text(song.song_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           subtitle: Text(song.artist, style: const TextStyle(color: Colors.grey)),
@@ -623,7 +644,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               return ListTile(
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: Image.network(getHighQualityThumbnail(song.thumbnail_url), width: 44, height: 44, fit: BoxFit.cover),
+                  child: CachedNetworkImage(
+                    imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+                    width: 44,
+                    height: 44,
+                    memCacheWidth: 88,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 44),
+                  ),
                 ),
                 title: Text(song.song_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: Text('${song.artist} • $timeStr', style: const TextStyle(color: Colors.grey)),
@@ -702,11 +730,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    getHighQualityThumbnail(album['thumbnail'] ?? ''),
+                  child: CachedNetworkImage(
+                    imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
                     fit: BoxFit.cover,
                     width: double.infinity,
-                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.white10),
+                    memCacheWidth: 240,
+                    errorWidget: (context, url, error) => Container(color: Colors.white10),
                   ),
                 ),
               ),
@@ -749,12 +778,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           },
           leading: ClipRRect(
             borderRadius: BorderRadius.circular(25),
-            child: Image.network(
-              getHighQualityThumbnail(artist['thumbnail'] ?? ''),
+            child: CachedNetworkImage(
+              imageUrl: getHighQualityThumbnail(artist['thumbnail'] ?? ''),
               width: 50,
               height: 50,
+              memCacheWidth: 100,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(color: Colors.white10),
+              errorWidget: (context, url, error) => Container(color: Colors.white10),
             ),
           ),
           title: Text(artist['name'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -973,12 +1003,13 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                             key: ValueKey(song.id + index.toString()),
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(6),
-                              child: Image.network(
-                                getHighQualityThumbnail(song.thumbnail_url),
+                              child: CachedNetworkImage(
+                                imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                                 width: 44,
                                 height: 44,
+                                memCacheWidth: 88,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
+                                errorWidget: (context, url, error) =>
                                     const Icon(Icons.music_note, size: 44),
                               ),
                             ),
@@ -1263,12 +1294,13 @@ class _DownloadedPlaylistPageState extends ConsumerState<DownloadedPlaylistPage>
                     return ListTile(
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          song.thumbnail_url,
+                        child: CachedNetworkImage(
+                          imageUrl: song.thumbnail_url,
                           width: 48,
                           height: 48,
+                          memCacheWidth: 96,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
+                          errorWidget: (context, url, error) =>
                               const Icon(Icons.music_note, size: 48),
                         ),
                       ),
@@ -1327,10 +1359,11 @@ class PlaylistCoverWidget extends StatelessWidget {
           padding: EdgeInsets.zero,
           physics: const NeverScrollableScrollPhysics(),
           children: playlist.songs.take(4).map((song) {
-            return Image.network(
-              song.thumbnail_url,
+            return CachedNetworkImage(
+              imageUrl: song.thumbnail_url,
+              memCacheWidth: size.toInt(),
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(color: Colors.white10),
+              errorWidget: (context, url, error) => Container(color: Colors.white10),
             );
           }).toList(),
         ),
@@ -1338,12 +1371,13 @@ class PlaylistCoverWidget extends StatelessWidget {
     }
 
     if (playlist.songs.isNotEmpty) {
-      return Image.network(
-        playlist.songs.first.thumbnail_url,
+      return CachedNetworkImage(
+        imageUrl: playlist.songs.first.thumbnail_url,
         width: size,
         height: size,
+        memCacheWidth: (size * 2).toInt(),
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
+        errorWidget: (context, url, error) =>
             Container(color: Colors.white10, child: const Icon(Icons.music_note, color: Colors.white70)),
       );
     }

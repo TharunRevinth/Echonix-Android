@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/theme/app_pallete.dart';
@@ -398,12 +399,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             },
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: Image.network(
-                getHighQualityThumbnail(song.thumbnail_url),
+              child: CachedNetworkImage(
+                imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                 width: 48,
                 height: 48,
+                memCacheWidth: 96,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
+                errorWidget: (context, url, error) =>
                     const Icon(Icons.music_note),
               ),
             ),
@@ -484,12 +486,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               },
               leading: ClipRRect(
                 borderRadius: BorderRadius.circular(type == 'artist' ? 24 : 4),
-                child: Image.network(
-                  getHighQualityThumbnail(item['thumbnail'] ?? ''),
+                child: CachedNetworkImage(
+                  imageUrl: getHighQualityThumbnail(item['thumbnail'] ?? ''),
                   width: 40,
                   height: 40,
+                  memCacheWidth: 80,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
+                  errorWidget: (context, url, error) =>
                       const Icon(Icons.music_note),
                 ),
               ),
@@ -600,12 +603,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   },
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                    child: Image.network(
-                      getHighQualityThumbnail(song['thumbnail'] ?? ''),
+                    child: CachedNetworkImage(
+                      imageUrl: getHighQualityThumbnail(song['thumbnail'] ?? ''),
                       width: 44,
                       height: 44,
+                      memCacheWidth: 88,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
+                      errorWidget: (context, url, error) =>
                           const Icon(Icons.music_note),
                     ),
                   ),
@@ -661,12 +665,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              getHighQualityThumbnail(album['thumbnail'] ?? ''),
+                            child: CachedNetworkImage(
+                              imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
                               width: 110,
                               height: 110,
+                              memCacheWidth: 220,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
+                              errorWidget: (context, url, error) =>
                                   const Icon(Icons.album, size: 110, color: Colors.grey),
                             ),
                           ),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/providers/current_user_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
@@ -503,11 +504,18 @@ class SongsPage extends ConsumerWidget {
                               clipBehavior: Clip.antiAlias,
                               child: Row(
                                 children: [
-                                  Image.network(
-                                    song.thumbnail_url,
+                                  CachedNetworkImage(
+                                    imageUrl: song.thumbnail_url,
                                     width: 56,
                                     height: 56,
+                                    memCacheWidth: 112,
                                     fit: BoxFit.cover,
+                                    errorWidget: (context, url, error) => Container(
+                                      width: 56,
+                                      height: 56,
+                                      color: const Color(0xFF282828),
+                                      child: const Icon(Icons.music_note, color: Colors.white54),
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -652,11 +660,18 @@ class SongsPage extends ConsumerWidget {
                                                   children: [
                                                     ClipRRect(
                                                       borderRadius: BorderRadius.circular(4),
-                                                      child: Image.network(
-                                                        thumb,
+                                                      child: CachedNetworkImage(
+                                                        imageUrl: thumb,
                                                         width: 50,
                                                         height: 50,
+                                                        memCacheWidth: 100,
                                                         fit: BoxFit.cover,
+                                                        errorWidget: (context, url, error) => Container(
+                                                          width: 50,
+                                                          height: 50,
+                                                          color: const Color(0xFF282828),
+                                                          child: const Icon(Icons.music_note, color: Colors.white54),
+                                                        ),
                                                       ),
                                                     ),
                                                     const SizedBox(width: 12),
@@ -751,12 +766,13 @@ class SongsPage extends ConsumerWidget {
                                           children: [
                                             ClipRRect(
                                               borderRadius: BorderRadius.circular(6),
-                                              child: Image.network(
-                                                thumb,
+                                              child: CachedNetworkImage(
+                                                imageUrl: thumb,
                                                 width: 130,
                                                 height: 130,
+                                                memCacheWidth: 260,
                                                 fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) => const Icon(
+                                                errorWidget: (context, url, error) => const Icon(
                                                   Icons.music_note,
                                                   size: 130,
                                                 ),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/utils.dart';
@@ -72,12 +73,13 @@ class QueuePage extends ConsumerWidget {
                       child: ListTile(
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(6),
-                          child: Image.network(
-                            getHighQualityThumbnail(currentSong.thumbnail_url),
+                          child: CachedNetworkImage(
+                            imageUrl: getHighQualityThumbnail(currentSong.thumbnail_url),
                             width: 50,
                             height: 50,
+                            memCacheWidth: 100,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
+                            errorWidget: (context, url, error) =>
                                 const Icon(Icons.music_note, color: Colors.white),
                           ),
                         ),
@@ -142,12 +144,13 @@ class QueuePage extends ConsumerWidget {
                             child: ListTile(
                               leading: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                child: Image.network(
-                                  getHighQualityThumbnail(song.thumbnail_url),
+                                child: CachedNetworkImage(
+                                  imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                                   width: 48,
                                   height: 48,
+                                  memCacheWidth: 96,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
+                                  errorWidget: (context, url, error) =>
                                       const Icon(Icons.music_note, color: Colors.white),
                                 ),
                               ),
@@ -192,12 +195,13 @@ class QueuePage extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(6),
                               child: Opacity(
                                 opacity: 0.5,
-                                child: Image.network(
-                                  getHighQualityThumbnail(song.thumbnail_url),
+                                child: CachedNetworkImage(
+                                  imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                                   width: 40,
                                   height: 40,
+                                  memCacheWidth: 80,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
+                                  errorWidget: (context, url, error) =>
                                       const Icon(Icons.music_note, color: Colors.white),
                                 ),
                               ),

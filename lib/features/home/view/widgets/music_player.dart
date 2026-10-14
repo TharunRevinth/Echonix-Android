@@ -14,7 +14,8 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:palette_generator/palette_generator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:client/core/providers/dominant_color_provider.dart';
 
 class MusicPlayer extends ConsumerStatefulWidget {
   const MusicPlayer({super.key});
@@ -39,9 +40,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
   Timer? _lyricTimer;
   int _lyricsOffsetMs = 0;
 
-  Color? _dominantColor;
-  String? _colorExtractedFor;
-
   bool _userScrolling = false;
   Timer? _userScrollEndTimer;
 
@@ -62,7 +60,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
       final currentSong = ref.read(currentSongNotifierProvider);
       if (currentSong != null) {
         _loadLyrics(currentSong.song_name, currentSong.artist, currentSong.song_url);
-        _extractDominantColor(getHighQualityThumbnail(currentSong.thumbnail_url));
       }
     });
   }
@@ -74,31 +71,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
     _lyricTimer?.cancel();
     _userScrollEndTimer?.cancel();
     super.dispose();
-  }
-
-  void _extractDominantColor(String imageUrl) async {
-    if (_colorExtractedFor == imageUrl) return;
-    _colorExtractedFor = imageUrl;
-    setState(() {
-      _dominantColor = null; // Reset immediately on song change
-    });
-    try {
-      final provider = NetworkImage(
-        imageUrl,
-        headers: const {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
-        },
-      );
-      final palette = await PaletteGenerator.fromImageProvider(
-        provider,
-        maximumColorCount: 4,
-      );
-      if (mounted && palette.dominantColor != null) {
-        setState(() {
-          _dominantColor = palette.dominantColor!.color;
-        });
-      }
-    } catch (_) {}
   }
 
   void _loadLyrics(String songName, String artist, String songUrl) async {
@@ -274,17 +246,13 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
     ref.listen<SongModel?>(currentSongNotifierProvider, (previous, next) {
       if (next != null) {
         _loadLyrics(next.song_name, next.artist, next.song_url);
-        _extractDominantColor(getHighQualityThumbnail(next.thumbnail_url));
       }
     });
 
     if (currentSong == null) return const SizedBox();
 
-    debugPrint("EchonixPlayer: song_name='${currentSong.song_name}'");
-    debugPrint("EchonixPlayer: thumbnail_url='${currentSong.thumbnail_url}'");
-    debugPrint("EchonixPlayer: getHighQualityThumbnail='${getHighQualityThumbnail(currentSong.thumbnail_url)}'");
-
-    final dynColor = _dominantColor ?? hexToColor(currentSong.hex_code);
+    final hqThumbnail = getHighQualityThumbnail(currentSong.thumbnail_url);
+    final dynColor = ref.watch(dominantColorProvider(hqThumbnail)).valueOrNull ?? hexToColor(currentSong.hex_code);
 
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
@@ -356,7 +324,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer>
                                   ),
                                 ],
                                 image: DecorationImage(
-                                  image: NetworkImage(getHighQualityThumbnail(currentSong.thumbnail_url)),
+                                  image: CachedNetworkImageProvider(hqThumbnail),
                                   fit: BoxFit.cover,
                                 ),
                               ),

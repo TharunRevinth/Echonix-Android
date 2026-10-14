@@ -20,6 +20,10 @@ class HomeLocalRepository {
     'saved_albums',
     'saved_artists',
     'home_feed_cache',
+    'palette_cache',
+    'lyrics_cache',
+    'liked_ids',
+    'sync_outbox',
   };
 
   void uploadLocalSong(SongModel song) {
