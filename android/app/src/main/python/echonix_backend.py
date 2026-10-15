@@ -24,7 +24,7 @@ def _get_video_lock(video_id):
             _video_locks[video_id] = threading.Lock()
         return _video_locks[video_id]
 
-STREAM_CLIENT_CHAIN = [['android_vr'], None]
+STREAM_CLIENT_CHAIN = [['android_music', 'ios', 'android', 'web'], ['android_vr'], None]
 DOWNLOAD_STATUS = {}
 
 def init_ytmusic(creds_dir):
@@ -604,10 +604,10 @@ def resolve_stream(video_id, current_id=None):
         out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
         dl_attempts = []
         for client_spec in STREAM_CLIENT_CHAIN:
-            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
+            client_name = client_spec[0] if isinstance(client_spec, list) and client_spec else "default"
             try:
                 opts = {
-                    'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                    'format': '251/140/bestaudio/best',
                     'outtmpl': out_tmpl,
                     'quiet': True,
                     'no_warnings': True,
@@ -618,6 +618,10 @@ def resolve_stream(video_id, current_id=None):
                 }
                 if client_spec is not None:
                     opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+                    if 'android_music' in client_spec:
+                        opts['http_headers'] = {
+                            'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+                        }
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
                     ext = info.get('ext', 'm4a') if info else 'm4a'
@@ -648,10 +652,10 @@ def resolve_stream(video_id, current_id=None):
         # (e) Only if both downloads fail, the existing remote-proxy path
         remote_attempts = []
         for client_spec in STREAM_CLIENT_CHAIN:
-            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
+            client_name = client_spec[0] if isinstance(client_spec, list) and client_spec else "default"
             try:
                 opts = {
-                    'format': 'bestaudio[ext=m4a]/bestaudio',
+                    'format': '251/140/bestaudio/best',
                     'quiet': True,
                     'no_warnings': True,
                     'noplaylist': True,
@@ -661,6 +665,10 @@ def resolve_stream(video_id, current_id=None):
                 }
                 if client_spec is not None:
                     opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+                    if 'android_music' in client_spec:
+                        opts['http_headers'] = {
+                            'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+                        }
 
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
