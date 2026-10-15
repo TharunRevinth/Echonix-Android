@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
-import 'package:client/core/theme/app_pallete.dart';
-import 'package:client/core/theme/glass.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/widgets/loader.dart';
 import 'package:client/core/python_backend.dart';
@@ -13,10 +11,30 @@ import 'package:client/features/home/view/pages/playlist_details_page.dart';
 import 'package:client/features/home/view/pages/home_page.dart';
 import 'package:client/features/home/viewmodel/local_playlists_notifier.dart';
 import 'package:client/features/home/viewmodel/likes_notifier.dart';
+import 'package:client/features/home/viewmodel/downloads_notifier.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+class _KeepAliveTab extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveTab({required this.child});
+
+  @override
+  State<_KeepAliveTab> createState() => _KeepAliveTabState();
+}
+
+class _KeepAliveTabState extends State<_KeepAliveTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -26,9 +44,6 @@ class LibraryPage extends ConsumerStatefulWidget {
 }
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
-  int _selectedTab = 0; 
-  // 0: Favorites, 1: Playlists, 2: Downloads, 3: Recently Played, 4: History, 5: Most Played, 6: Albums, 7: Artists
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,93 +63,57 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
-                child: Text(
-                  'Your Library',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ),
-              // Glass Pill Segmented Control
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: GlassSurface(
-                  borderRadius: 24,
-                  blurSigma: 18,
-                  padding: const EdgeInsets.all(4),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildTabSegment(0, 'Songs'),
-                        _buildTabSegment(1, 'Playlists'),
-                        _buildTabSegment(2, 'Albums'),
-                        _buildTabSegment(3, 'Artists'),
-                        _buildTabSegment(4, 'Downloads'),
-                        _buildTabSegment(5, 'History'),
-                      ],
-                    ),
+          child: DefaultTabController(
+            length: 8,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
+                  child: Text(
+                    'Your Library',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
-              ),
-              const Divider(color: Colors.white10, height: 1),
-              Expanded(
-                child: _buildSelectedTabContent(),
-              ),
-            ],
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white60,
+                  indicatorColor: Theme.of(context).colorScheme.primary,
+                  indicatorWeight: 3,
+                  dividerColor: Colors.white10,
+                  tabs: const [
+                    Tab(text: 'Songs'),
+                    Tab(text: 'Downloads'),
+                    Tab(text: 'Playlists'),
+                    Tab(text: 'Albums'),
+                    Tab(text: 'Artists'),
+                    Tab(text: 'Recently Played'),
+                    Tab(text: 'Most Played'),
+                    Tab(text: 'History'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _KeepAliveTab(child: _buildFavorites()),
+                      _KeepAliveTab(child: _buildDownloads()),
+                      _KeepAliveTab(child: _buildPlaylists()),
+                      _KeepAliveTab(child: _buildSavedAlbums()),
+                      _KeepAliveTab(child: _buildSavedArtists()),
+                      _KeepAliveTab(child: _buildRecentlyPlayed()),
+                      _KeepAliveTab(child: _buildMostPlayed()),
+                      _KeepAliveTab(child: _buildPlaybackHistory()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  Widget _buildTabSegment(int index, String label) {
-    final isSelected = _selectedTab == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTab = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.18) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected
-              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1)
-              : Border.all(color: Colors.transparent),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.white60,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelectedTabContent() {
-    switch (_selectedTab) {
-      case 0:
-        return _buildFavorites();
-      case 1:
-        return _buildPlaylists();
-      case 2:
-        return _buildSavedAlbums();
-      case 3:
-        return _buildSavedArtists();
-      case 4:
-        return _buildDownloads();
-      case 5:
-        return _buildPlaybackHistory();
-      default:
-        return const SizedBox();
-    }
   }
 
   void _deleteSong(SongModel song) async {
@@ -410,7 +389,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Widget _buildDownloads() {
+    final dlState = ref.watch(downloadsProvider);
     return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey(dlState.hashCode),
       future: PythonBackend.getDownloadedSongs(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -428,10 +409,36 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
         final List songsList = res['songs'] ?? [];
         if (songsList.isEmpty) {
-          return const Center(
-            child: Text('No downloaded songs found.', style: TextStyle(color: Colors.grey)),
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.download_done_rounded, size: 64, color: Colors.white.withOpacity(0.3)),
+                const SizedBox(height: 16),
+                const Text(
+                  'Nothing downloaded yet',
+                  style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Songs and playlists you download will appear here',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
           );
         }
+
+        int totalBytes = 0;
+        for (final s in songsList) {
+          if (s is Map && s['size_bytes'] is num) {
+            totalBytes += (s['size_bytes'] as num).toInt();
+          }
+        }
+        final double mbUsed = totalBytes / (1024 * 1024);
+        final String storageText = mbUsed >= 1024
+            ? '${(mbUsed / 1024).toStringAsFixed(1)} GB'
+            : '${mbUsed.toStringAsFixed(1)} MB';
 
         final Map<String, List<SongModel>> groupedPlaylists = {};
         final List<Map<String, dynamic>> individualSongsRaw = [];
@@ -447,14 +454,34 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         }
 
         final playlistKeys = groupedPlaylists.keys.toList();
-        final totalItemsCount = playlistKeys.length + individualSongsRaw.length;
+        final totalItemsCount = playlistKeys.length + individualSongsRaw.length + 1;
 
         return ListView.builder(
           padding: const EdgeInsets.only(bottom: 160),
           itemCount: totalItemsCount,
           itemBuilder: (context, index) {
-            if (index < playlistKeys.length) {
-              final playlistName = playlistKeys[index];
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${songsList.length} downloaded tracks',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      'Storage used: $storageText',
+                      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final itemIdx = index - 1;
+            if (itemIdx < playlistKeys.length) {
+              final playlistName = playlistKeys[itemIdx];
               final playlistSongs = groupedPlaylists[playlistName]!;
               final firstSongThumb = playlistSongs.isNotEmpty ? playlistSongs.first.thumbnail_url : '';
 
@@ -503,10 +530,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 },
               );
             } else {
-              final songIndex = index - playlistKeys.length;
+              final songIndex = itemIdx - playlistKeys.length;
               final rawSong = individualSongsRaw[songIndex];
               final song = SongModel.fromBackend(Map<String, dynamic>.from(rawSong), hexCode: 'B388FF');
               final hasLyrics = rawSong['lyrics_data'] != null;
+              final sizeBytes = (rawSong['size_bytes'] as num?)?.toInt() ?? 0;
+              final songSizeMb = sizeBytes > 0 ? '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB' : '';
 
               return ListTile(
                 leading: ClipRRect(
@@ -538,7 +567,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       ),
                   ],
                 ),
-                subtitle: Text(song.artist, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                subtitle: Text(
+                  songSizeMb.isNotEmpty ? '${song.artist} • $songSizeMb' : song.artist,
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
                 trailing: PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.white70),
                   color: const Color(0xFF1E1E1E),

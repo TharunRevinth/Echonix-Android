@@ -11,6 +11,7 @@ import 'package:client/core/utils.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/view/pages/queue_page.dart';
 import 'package:client/features/home/viewmodel/likes_notifier.dart';
+import 'package:client/features/home/viewmodel/downloads_notifier.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -257,7 +258,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
     final abs = ms.abs();
     final sec = abs ~/ 1000;
     final dec = ((abs % 1000) / 100).round();
-    return '$sign${sec}.${dec}s';
+    return '$sign$sec.${dec}s';
   }
 
   String _formatDuration(Duration d) {
@@ -417,6 +418,11 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
                           size: 26,
                         ),
                       ),
+                      DownloadButton(
+                        song: currentSong,
+                        size: 24,
+                        color: Colors.white70,
+                      ),
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.more_vert, color: Colors.white70),
                         color: const Color(0xFF1E1428),
@@ -426,9 +432,9 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
                           }
                         },
                         itemBuilder: (context) => [
-                          PopupMenuItem(
+                          const PopupMenuItem(
                             value: 'queue',
-                            child: const Text('View Queue', style: TextStyle(color: Colors.white)),
+                            child: Text('View Queue', style: TextStyle(color: Colors.white)),
                           ),
                           PopupMenuItem(
                             enabled: false,

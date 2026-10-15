@@ -1,10 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
-import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/widgets/loader.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/features/home/models/song_model.dart';
-import 'package:client/features/home/viewmodel/local_playlists_notifier.dart';
+import 'package:client/features/home/viewmodel/downloads_notifier.dart';
 import 'package:client/core/widgets/add_to_playlist_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -151,23 +150,17 @@ class PlaylistDetailsPage extends ConsumerWidget {
                               OutlinedButton.icon(
                                 onPressed: songs.isEmpty
                                     ? null
-                                    : () async {
+                                    : () {
+                                        for (final song in songs) {
+                                          ref.read(downloadsProvider.notifier).startDownloading(song);
+                                        }
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              'Downloading ${songs.length} tracks in background...',
+                                              'Queued ${songs.length} tracks for download',
                                             ),
                                           ),
                                         );
-                                        for (final song in songs) {
-                                          await PythonBackend.downloadSong(
-                                            song.id,
-                                            song.song_name,
-                                            song.artist,
-                                            song.thumbnail_url,
-                                            title,
-                                          );
-                                        }
                                       },
                                 icon: const Icon(Icons.download, color: Colors.white),
                                 label: const Text(
@@ -209,41 +202,35 @@ class PlaylistDetailsPage extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.grey),
                           ),
-                          trailing: PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, color: Colors.grey),
-                            color: const Color(0xFF1E1E1E),
-                            onSelected: (value) async {
-                              if (value == 'download') {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Downloading "${song.song_name}" in background...'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              DownloadButton(song: song, size: 22),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, color: Colors.grey),
+                                color: const Color(0xFF1E1E1E),
+                                onSelected: (value) {
+                                  if (value == 'download') {
+                                    ref.read(downloadsProvider.notifier).startDownloading(song);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Download queued: "${song.song_name}"'),
+                                      ),
+                                    );
+                                  } else if (value == 'playlist') {
+                                    _showAddToPlaylistDialog(context, ref, song);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'playlist',
+                                    child: Text('Add to Playlist...', style: TextStyle(color: Colors.white)),
                                   ),
-                                );
-                                final res = await PythonBackend.downloadSong(
-                                  song.id,
-                                  song.song_name,
-                                  song.artist,
-                                  song.thumbnail_url,
-                                );
-                                if (res['success'] != true) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Failed to download: ${res['error']}'),
-                                    ),
-                                  );
-                                }
-                              } else if (value == 'playlist') {
-                                _showAddToPlaylistDialog(context, ref, song);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'playlist',
-                                child: Text('Add to Playlist...', style: TextStyle(color: Colors.white)),
-                              ),
-                              const PopupMenuItem(
-                                value: 'download',
-                                child: Text('Download', style: TextStyle(color: Colors.white)),
+                                  const PopupMenuItem(
+                                    value: 'download',
+                                    child: Text('Download', style: TextStyle(color: Colors.white)),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

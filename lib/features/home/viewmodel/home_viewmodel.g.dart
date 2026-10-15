@@ -53,7 +53,7 @@ final getHomeFeedSectionsProvider = AutoDisposeAsyncNotifierProvider<
 
 typedef _$GetHomeFeedSections
     = AutoDisposeAsyncNotifier<List<Map<String, dynamic>>>;
-String _$homeViewModelHash() => r'1643f0ba44320a36be7a8c3659b2709eda23af8c';
+String _$homeViewModelHash() => r'e508864b450a4d225fc01abd82b37996c67c1d66';
 
 /// See also [HomeViewModel].
 @ProviderFor(HomeViewModel)

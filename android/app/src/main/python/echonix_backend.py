@@ -971,6 +971,7 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
                 "progress": 1.0,
                 "error": None
             }
+            print(f"[Echonix][download] done id={video_id}")
 
         except Exception as e:
             # Delete partial files if download failed
