@@ -105,12 +105,28 @@ class PythonBackend {
     return _call('get_stream_url', {'video_id': videoId}, lane: 'priority');
   }
 
-  static Future<Map<String, dynamic>> resolveStream(String videoId, {String lane = 'priority'}) async {
-    return _call('resolve_stream', {'video_id': videoId}, lane: lane);
+  static Future<Map<String, dynamic>> resolveStream(
+    String videoId, {
+    String lane = 'priority',
+    String? currentPlayingId,
+  }) async {
+    final Map<String, dynamic> args = {'video_id': videoId};
+    if (currentPlayingId != null && currentPlayingId.isNotEmpty) {
+      args['current_id'] = currentPlayingId;
+    }
+    return _call('resolve_stream', args, lane: lane);
   }
 
-  static Future<Map<String, dynamic>> resolveStreamDownload(String videoId, {String lane = 'priority'}) async {
-    return _call('resolve_stream_download', {'video_id': videoId}, lane: lane);
+  static Future<Map<String, dynamic>> resolveStreamDownload(
+    String videoId, {
+    String lane = 'priority',
+    String? currentPlayingId,
+  }) async {
+    final Map<String, dynamic> args = {'video_id': videoId};
+    if (currentPlayingId != null && currentPlayingId.isNotEmpty) {
+      args['current_id'] = currentPlayingId;
+    }
+    return _call('resolve_stream_download', args, lane: lane);
   }
 
   static Future<Map<String, dynamic>> diagnoseStream(String videoId) async {

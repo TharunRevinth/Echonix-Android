@@ -71,6 +71,9 @@ class _StreamCacheEntry {
 }
 
 class LocalRedirectServer {
+  final Ref ref;
+  LocalRedirectServer(this.ref);
+
   HttpServer? _server;
   int get port => _server?.port ?? 8080;
   final String serverToken = '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1000000)}';
@@ -78,6 +81,7 @@ class LocalRedirectServer {
   final Map<String, _StreamCacheEntry> _cache = {};
   final Map<String, Future<_StreamCacheEntry?>> _inflight = {};
   final HttpClient _httpClient = HttpClient()..autoUncompress = false;
+  Future<void>? _prefetchOperation;
 
   Future<void> start() async {
     try {
@@ -98,7 +102,16 @@ class LocalRedirectServer {
     if (id.isEmpty) return Future.value(null);
     final cached = _cache[id];
     if (cached != null && !cached.isExpired) {
-      return Future.value(cached);
+      if (cached.isLocal) {
+        final f = File(cached.url);
+        if (f.existsSync() && f.lengthSync() > 1000) {
+          return Future.value(cached);
+        } else {
+          _cache.remove(id);
+        }
+      } else {
+        return Future.value(cached);
+      }
     }
     final existingFuture = _inflight[id];
     if (existingFuture != null) {
@@ -106,7 +119,12 @@ class LocalRedirectServer {
     }
 
     final sw = Stopwatch()..start();
-    final future = PythonBackend.resolveStream(id, lane: lane).then((res) {
+    final currentPlayingId = ref.read(currentSongNotifierProvider)?.id;
+    final future = PythonBackend.resolveStream(
+      id,
+      lane: lane,
+      currentPlayingId: currentPlayingId,
+    ).then((res) {
       if (res['success'] == true && res['url'] != null) {
         final url = res['url'] as String;
         final ext = res['ext'] as String? ?? 'm4a';
@@ -121,9 +139,8 @@ class LocalRedirectServer {
         final isLocal = res['is_local'] == true || url.startsWith('/');
         final client = res['client'] ?? 'default';
 
-        if (kDebugMode) {
-          debugPrint('[Echonix][stream] resolve id=$id client=$client ms=${sw.elapsedMilliseconds}');
-        }
+        // ignore: avoid_print
+        print('[Echonix][stream] resolve id=$id client=$client isLocal=$isLocal ms=${sw.elapsedMilliseconds}');
 
         final entry = _StreamCacheEntry(
           url: url,
@@ -135,11 +152,12 @@ class LocalRedirectServer {
         _cache[id] = entry;
         return entry;
       }
+      // ignore: avoid_print
+      print('[Echonix][stream] resolve failed id=$id error=${res['error']} ms=${sw.elapsedMilliseconds}');
       return null;
     }).catchError((e) {
-      if (kDebugMode) {
-        debugPrint('[Echonix][stream] resolve error for $id: $e');
-      }
+      // ignore: avoid_print
+      print('[Echonix][stream] resolve error for $id: $e ms=${sw.elapsedMilliseconds}');
       return null;
     }).whenComplete(() {
       _inflight.remove(id);
@@ -152,8 +170,20 @@ class LocalRedirectServer {
   void prefetch(String videoId) {
     if (videoId.isEmpty) return;
     final cached = _cache[videoId];
-    if (cached != null && !cached.isExpired) return;
-    _resolve(videoId, lane: 'background');
+    if (cached != null && !cached.isExpired) {
+      if (!cached.isLocal || (File(cached.url).existsSync() && File(cached.url).lengthSync() > 1000)) {
+        return;
+      }
+    }
+    _prefetchOperation = (_prefetchOperation ?? Future.value()).then((_) async {
+      final c = _cache[videoId];
+      if (c != null && !c.isExpired) {
+        if (!c.isLocal || (File(c.url).existsSync() && File(c.url).lengthSync() > 1000)) {
+          return;
+        }
+      }
+      await _resolve(videoId, lane: 'background');
+    }).catchError((_) {});
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -175,10 +205,7 @@ class LocalRedirectServer {
     _StreamCacheEntry? entry = await _resolve(videoId, lane: 'priority');
 
     if (entry == null) {
-      entry = await _fallbackDownload(videoId, sw);
-    }
-
-    if (entry == null) {
+      ref.read(playbackErrorProvider.notifier).state = 'Failed to load audio for playback ($videoId)';
       request.response.statusCode = HttpStatus.internalServerError;
       await request.response.close();
       return;
@@ -191,33 +218,10 @@ class LocalRedirectServer {
 
     bool proxySuccess = await _proxyRemoteStream(request, videoId, entry, sw);
     if (!proxySuccess) {
-      final fallbackEntry = await _fallbackDownload(videoId, sw);
-      if (fallbackEntry != null && fallbackEntry.isLocal) {
-        await _serveLocalFile(request, File(fallbackEntry.url));
-      } else {
-        request.response.statusCode = HttpStatus.internalServerError;
-        await request.response.close();
-      }
+      ref.read(playbackErrorProvider.notifier).state = 'Remote stream playback failed ($videoId)';
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
     }
-  }
-
-  Future<_StreamCacheEntry?> _fallbackDownload(String videoId, Stopwatch sw) async {
-    final dlRes = await PythonBackend.resolveStreamDownload(videoId, lane: 'priority');
-    if (dlRes['success'] == true && dlRes['url'] != null) {
-      final url = dlRes['url'] as String;
-      final ext = dlRes['ext'] as String? ?? 'm4a';
-      final entry = _StreamCacheEntry(
-        url: url,
-        ext: ext,
-        headers: {},
-        expiresAt: DateTime.now().add(const Duration(days: 365)),
-        isLocal: true,
-      );
-      _cache[videoId] = entry;
-      debugPrint('[Echonix][stream] resolve id=$videoId mode=fallback ms=${sw.elapsedMilliseconds}');
-      return entry;
-    }
-    return null;
   }
 
   Future<bool> _proxyRemoteStream(
@@ -250,7 +254,8 @@ class LocalRedirectServer {
           upstreamResp.drain().catchError((_) {});
           _cache.remove(videoId);
           if (attempt == 0) {
-            final reRes = await PythonBackend.resolveStream(videoId, lane: 'priority');
+            final currentPlayingId = ref.read(currentSongNotifierProvider)?.id;
+            final reRes = await PythonBackend.resolveStream(videoId, lane: 'priority', currentPlayingId: currentPlayingId);
             if (reRes['success'] == true && reRes['url'] != null) {
               final newUrl = reRes['url'] as String;
               final ext = reRes['ext'] as String? ?? 'm4a';
@@ -310,13 +315,21 @@ class LocalRedirectServer {
 
     final length = await file.length();
     request.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
-    final ext = file.path.endsWith('.mp3') ? 'mpeg' : 'mp4';
+    final ext = file.path.endsWith('.mp3')
+        ? 'mpeg'
+        : (file.path.endsWith('.webm') ? 'webm' : (file.path.endsWith('.ogg') || file.path.endsWith('.opus') ? 'ogg' : 'mp4'));
     request.response.headers.contentType = ContentType('audio', ext);
 
     final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
     if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
       final parts = rangeHeader.substring(6).split('-');
       final start = int.tryParse(parts[0]) ?? 0;
+      if (start >= length) {
+        request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+        request.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes */$length');
+        await request.response.close();
+        return;
+      }
       final end = parts.length > 1 && parts[1].isNotEmpty
           ? int.tryParse(parts[1]) ?? (length - 1)
           : (length - 1);
@@ -358,6 +371,9 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   SongModel? _activeSignalTrack;
   int _activeSignalStartedAt = 0;
   int _maxPositionMs = 0;
+  final Stopwatch _tapStopwatch = Stopwatch();
+  bool _hasLoggedFirstAudio = false;
+  bool _hasPrefetchedNextForCurrent = false;
 
   void _recordListeningSignal({bool completed = false}) {
     if (_activeSignalTrack == null) return;
@@ -507,7 +523,8 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   }
 
   void _initRedirectServer() {
-    _redirectServer = LocalRedirectServer();
+    if (_redirectServer != null) return;
+    _redirectServer = LocalRedirectServer(ref);
     _serverStartFuture = _redirectServer!.start().then((_) {
       _isServerStarted = true;
     });
@@ -583,6 +600,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     // Listen to play/pause state
     audioPlayer!.playingStream.listen((playing) {
       isPlaying = playing;
+      if (playing && !_hasLoggedFirstAudio && state != null) {
+        _hasLoggedFirstAudio = true;
+        // ignore: avoid_print
+        print('[Echonix][playback] start id=${state!.id} title="${state!.song_name}" timeToFirstAudioMs=${_tapStopwatch.elapsedMilliseconds}');
+      }
     });
 
     audioPlayer!.currentIndexStream.listen((index) {
@@ -591,16 +613,18 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         currentSongIndex = index;
         state = song;
         _hasCountedForCurrentSong = false;
+        _hasPrefetchedNextForCurrent = false;
+        _hasLoggedFirstAudio = false;
+        if (!_tapStopwatch.isRunning) {
+          _tapStopwatch.reset();
+          _tapStopwatch.start();
+        }
+        ref.read(isPlayerLoadingProvider.notifier).state = true;
         _startListeningSignal(song);
 
         _homeLocalRepository.uploadLocalSong(song);
         _homeLocalRepository.recordRecentlyPlayed(song);
         ref.invalidate(recentlyPlayedProvider);
-
-        final nextIndex = index + 1;
-        if (nextIndex < playlist.length) {
-          _redirectServer?.prefetch(playlist[nextIndex].id);
-        }
 
         _scheduleAutoplayCheck();
       }
@@ -608,6 +632,18 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
     // Position-based tracker: min(30s, 50% duration)
     audioPlayer!.positionStream.listen((position) {
+      if (position > Duration.zero && !_hasLoggedFirstAudio && state != null) {
+        _hasLoggedFirstAudio = true;
+        // ignore: avoid_print
+        print('[Echonix][playback] start id=${state!.id} title="${state!.song_name}" timeToFirstAudioMs=${_tapStopwatch.elapsedMilliseconds}');
+      }
+      if (!_hasPrefetchedNextForCurrent && position >= const Duration(seconds: 10)) {
+        _hasPrefetchedNextForCurrent = true;
+        final nextIndex = currentSongIndex + 1;
+        if (nextIndex < playlist.length) {
+          _redirectServer?.prefetch(playlist[nextIndex].id);
+        }
+      }
       if (!_hasAutoplayRunForCurrent && position >= const Duration(seconds: 10)) {
         _hasAutoplayRunForCurrent = true;
         if (!ref.read(isPlayerLoadingProvider)) {
@@ -643,6 +679,14 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       final isLoading = processingState == ProcessingState.loading ||
           processingState == ProcessingState.buffering;
       ref.read(isPlayerLoadingProvider.notifier).state = isLoading;
+
+      if ((processingState == ProcessingState.ready || audioPlayer!.playing) && !_hasLoggedFirstAudio) {
+        if (state != null) {
+          _hasLoggedFirstAudio = true;
+          // ignore: avoid_print
+          print('[Echonix][playback] start id=${state!.id} title="${state!.song_name}" timeToFirstAudioMs=${_tapStopwatch.elapsedMilliseconds}');
+        }
+      }
 
       if (processingState == ProcessingState.ready && _needsEqReapply) {
         _needsEqReapply = false;
@@ -715,6 +759,12 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     ref.read(playbackErrorProvider.notifier).state = null;
     final requestId = ++_playRequestId;
 
+    _tapStopwatch.reset();
+    _tapStopwatch.start();
+    _hasLoggedFirstAudio = false;
+    _hasPrefetchedNextForCurrent = false;
+    ref.read(isPlayerLoadingProvider.notifier).state = true;
+
     if (!_notificationPermissionRequested) {
       _notificationPermissionRequested = true;
       try {
@@ -745,11 +795,6 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       _homeLocalRepository.uploadLocalSong(song);
       _homeLocalRepository.recordRecentlyPlayed(song);
       ref.invalidate(recentlyPlayedProvider);
-
-      final nextIndex = index + 1;
-      if (nextIndex < playlist.length) {
-        _redirectServer?.prefetch(playlist[nextIndex].id);
-      }
 
       // Build sequence using local redirect URLs for all YouTube songs
       final sources = <AudioSource>[];
@@ -785,6 +830,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   }
 
   void next() {
+    _tapStopwatch.reset();
+    _tapStopwatch.start();
+    _hasLoggedFirstAudio = false;
+    _hasPrefetchedNextForCurrent = false;
+    ref.read(isPlayerLoadingProvider.notifier).state = true;
     if (audioPlayer != null && audioPlayer!.hasNext) {
       audioPlayer!.seekToNext();
     }
@@ -795,6 +845,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       audioPlayer!.seek(Duration.zero);
       return;
     }
+    _tapStopwatch.reset();
+    _tapStopwatch.start();
+    _hasLoggedFirstAudio = false;
+    _hasPrefetchedNextForCurrent = false;
+    ref.read(isPlayerLoadingProvider.notifier).state = true;
     if (audioPlayer != null && audioPlayer!.hasPrevious) {
       audioPlayer!.seekToPrevious();
     }
@@ -802,6 +857,11 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
   void playAtIndex(int index) {
     if (audioPlayer != null && index >= 0 && index < playlist.length) {
+      _tapStopwatch.reset();
+      _tapStopwatch.start();
+      _hasLoggedFirstAudio = false;
+      _hasPrefetchedNextForCurrent = false;
+      ref.read(isPlayerLoadingProvider.notifier).state = true;
       audioPlayer!.seek(Duration.zero, index: index);
       audioPlayer!.play();
     }

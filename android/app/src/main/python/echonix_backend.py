@@ -497,13 +497,47 @@ def get_lyrics(title, artist, duration_seconds=None):
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
-def resolve_stream(video_id):
+def _cleanup_tmp_audio(tmp_dir, current_playing_id=None, keep_ids=None):
+    try:
+        protected = set()
+        if current_playing_id:
+            protected.add(str(current_playing_id))
+        if keep_ids:
+            for k in keep_ids:
+                protected.add(str(k))
+
+        files = []
+        for f in os.listdir(tmp_dir):
+            if f.endswith('.part'):
+                continue
+            p = os.path.join(tmp_dir, f)
+            if os.path.isfile(p):
+                files.append(p)
+
+        # Sort oldest first by mtime
+        files.sort(key=lambda p: os.path.getmtime(p))
+
+        idx = 0
+        while len(files) > 5 and idx < len(files):
+            cand = files[idx]
+            cand_id = os.path.splitext(os.path.basename(cand))[0]
+            if cand_id not in protected:
+                try:
+                    os.remove(cand)
+                except:
+                    pass
+                files.pop(idx)
+            else:
+                idx += 1
+    except Exception:
+        pass
+
+def resolve_stream(video_id, current_id=None):
     global ytm_cache_path
     try:
-        # Check offline file
+        # (a) Permanent download: {id}.m4a or legacy download
         if ytm_cache_path:
             dl_dir = os.path.join(ytm_cache_path, "downloads")
-            # 1. New naming scheme: {video_id}.m4a
             new_path = os.path.join(dl_dir, f"{video_id}.m4a")
             if os.path.exists(new_path) and os.path.getsize(new_path) > 1000:
                 return json.dumps({
@@ -515,7 +549,6 @@ def resolve_stream(video_id):
                     "is_local": True,
                     "client": "local"
                 })
-            # 2. Legacy check:
             if os.path.exists(dl_dir):
                 for file in os.listdir(dl_dir):
                     if file.endswith(".json"):
@@ -539,7 +572,72 @@ def resolve_stream(video_id):
                         except:
                             pass
 
-        attempts = []
+        # (b) Cached temp file: tmp_audio/{id}.m4a (and other audio extensions)
+        tmp_dir = os.path.join(ytm_cache_path, "tmp_audio") if ytm_cache_path else "/tmp/echonix_tmp_audio"
+        os.makedirs(tmp_dir, exist_ok=True)
+        for ext_try in ['m4a', 'webm', 'opus', 'mp4']:
+            cached = os.path.join(tmp_dir, f"{video_id}.{ext_try}")
+            if os.path.exists(cached) and os.path.getsize(cached) > 1000:
+                return json.dumps({
+                    "success": True,
+                    "url": cached,
+                    "ext": ext_try,
+                    "headers": {},
+                    "expires_at": int(time.time()) + 86400 * 365,
+                    "is_local": True,
+                    "client": "cached_tmp"
+                })
+
+        # (c) Download to tmp_audio with android_vr
+        # (d) Retry with player_client=None (yt-dlp defaults)
+        out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
+        dl_attempts = []
+        for client_spec in STREAM_CLIENT_CHAIN:
+            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
+            try:
+                opts = {
+                    'format': 'bestaudio[ext=m4a]/bestaudio',
+                    'outtmpl': out_tmpl,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'noplaylist': True,
+                    'socket_timeout': 30,
+                    'geo_bypass': True,
+                    'nocheckcertificate': True,
+                    'http_headers': {
+                        'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
+                    },
+                }
+                if client_spec is not None:
+                    opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
+                    ext = info.get('ext', 'm4a') if info else 'm4a'
+                    final_path = os.path.join(tmp_dir, f"{video_id}.{ext}")
+                    if not (os.path.exists(final_path) and os.path.getsize(final_path) > 1000):
+                        for ext_try in ['m4a', 'webm', 'opus', 'mp4']:
+                            candidate = os.path.join(tmp_dir, f"{video_id}.{ext_try}")
+                            if os.path.exists(candidate) and os.path.getsize(candidate) > 1000:
+                                final_path = candidate
+                                ext = ext_try
+                                break
+                    if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
+                        _cleanup_tmp_audio(tmp_dir, current_playing_id=current_id, keep_ids=[video_id])
+                        return json.dumps({
+                            "success": True,
+                            "url": final_path,
+                            "ext": ext,
+                            "headers": {},
+                            "expires_at": int(time.time()) + 86400 * 365,
+                            "is_local": True,
+                            "client": client_name
+                        })
+                    dl_attempts.append({"client": client_name, "error": "Downloaded file missing or empty"})
+            except Exception as e:
+                dl_attempts.append({"client": client_name, "error": str(e)})
+
+        # (e) Only if both downloads fail, the existing remote-proxy path
+        remote_attempts = []
         for client_spec in STREAM_CLIENT_CHAIN:
             client_name = "android_vr" if client_spec == ['android_vr'] else "default"
             try:
@@ -557,19 +655,19 @@ def resolve_stream(video_id):
 
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
-                    stream_url = info.get('url')
-                    if not stream_url:
+                    stream_url = info.get('url') if info else None
+                    if not stream_url and info:
                         formats = info.get('formats') or []
                         for f in reversed(formats):
                             if f.get('vcodec') == 'none' and f.get('url'):
                                 stream_url = f.get('url')
                                 break
                     if not stream_url:
-                        attempts.append({"client": client_name, "error": "No stream URL found in format list"})
+                        remote_attempts.append({"client": client_name, "error": "No stream URL found in format list"})
                         continue
 
-                    ext = info.get('ext', 'm4a')
-                    headers = info.get('http_headers', {})
+                    ext = info.get('ext', 'm4a') if info else 'm4a'
+                    headers = info.get('http_headers', {}) if info else {}
                     expires_at = int(time.time()) + 1800
                     try:
                         parsed_url = urllib.parse.urlparse(stream_url)
@@ -589,62 +687,23 @@ def resolve_stream(video_id):
                         "client": client_name
                     })
             except Exception as e:
-                attempts.append({"client": client_name, "error": str(e)})
+                remote_attempts.append({"client": client_name, "error": str(e)})
 
-        last_error = attempts[-1]["error"] if attempts else "All client extractions failed"
+        last_error = dl_attempts[-1]["error"] if dl_attempts else "Stream resolution failed"
         return json.dumps({
             "success": False,
             "error": last_error,
-            "attempts": attempts
+            "download_attempts": dl_attempts,
+            "remote_attempts": remote_attempts
         })
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
-def resolve_stream_download(video_id):
-    global ytm_cache_path
-    try:
-        tmp_dir = os.path.join(ytm_cache_path, "tmp_audio")
-        os.makedirs(tmp_dir, exist_ok=True)
-        out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
-        attempts = []
-        for client_spec in STREAM_CLIENT_CHAIN:
-            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
-            try:
-                opts = {
-                    'format': 'bestaudio[ext=m4a]/bestaudio',
-                    'outtmpl': out_tmpl,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'noplaylist': True,
-                    'socket_timeout': 30,
-                    'geo_bypass': True,
-                    'nocheckcertificate': True,
-                }
-                if client_spec is not None:
-                    opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
-                    ext = info.get('ext', 'm4a')
-                    final_path = os.path.join(tmp_dir, f"{video_id}.{ext}")
-                    if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
-                        return json.dumps({
-                            "success": True,
-                            "url": final_path,
-                            "ext": ext,
-                            "headers": {},
-                            "expires_at": int(time.time()) + 86400 * 365,
-                            "is_local": True,
-                            "client": client_name
-                        })
-            except Exception as e:
-                attempts.append({"client": client_name, "error": str(e)})
-        last_error = attempts[-1]["error"] if attempts else "Download produced empty file."
-        return json.dumps({"success": False, "error": last_error, "attempts": attempts})
-    except Exception as e:
-        return json.dumps({"success": False, "error": str(e)})
+def resolve_stream_download(video_id, current_id=None):
+    return resolve_stream(video_id, current_id=current_id)
 
-def get_stream_url(video_id):
-    return resolve_stream(video_id)
+def get_stream_url(video_id, current_id=None):
+    return resolve_stream(video_id, current_id=current_id)
 
 def diagnose_stream(video_id):
     results = []
