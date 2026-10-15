@@ -15,6 +15,15 @@ creds_file_path = None
 ytm_cache_path = None
 _ytm_lock = threading.Lock()
 _download_semaphore = threading.Semaphore(2)
+_video_locks = {}
+_video_locks_guard = threading.Lock()
+
+def _get_video_lock(video_id):
+    with _video_locks_guard:
+        if video_id not in _video_locks:
+            _video_locks[video_id] = threading.Lock()
+        return _video_locks[video_id]
+
 STREAM_CLIENT_CHAIN = [['android_vr'], None]
 DOWNLOAD_STATUS = {}
 
@@ -534,6 +543,8 @@ def _cleanup_tmp_audio(tmp_dir, current_playing_id=None, keep_ids=None):
 
 def resolve_stream(video_id, current_id=None):
     global ytm_cache_path
+    lock = _get_video_lock(video_id)
+    lock.acquire()
     try:
         # (a) Permanent download: {id}.m4a or legacy download
         if ytm_cache_path:
@@ -596,7 +607,7 @@ def resolve_stream(video_id, current_id=None):
             client_name = "android_vr" if client_spec == ['android_vr'] else "default"
             try:
                 opts = {
-                    'format': 'bestaudio[ext=m4a]/bestaudio',
+                    'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
                     'outtmpl': out_tmpl,
                     'quiet': True,
                     'no_warnings': True,
@@ -604,9 +615,6 @@ def resolve_stream(video_id, current_id=None):
                     'socket_timeout': 30,
                     'geo_bypass': True,
                     'nocheckcertificate': True,
-                    'http_headers': {
-                        'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
-                    },
                 }
                 if client_spec is not None:
                     opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
@@ -634,6 +642,7 @@ def resolve_stream(video_id, current_id=None):
                         })
                     dl_attempts.append({"client": client_name, "error": "Downloaded file missing or empty"})
             except Exception as e:
+                print(f"[Echonix][stream] download error id={video_id} client={client_name}: {e}")
                 dl_attempts.append({"client": client_name, "error": str(e)})
 
         # (e) Only if both downloads fail, the existing remote-proxy path
@@ -698,6 +707,8 @@ def resolve_stream(video_id, current_id=None):
         })
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
+    finally:
+        lock.release()
 
 def resolve_stream_download(video_id, current_id=None):
     return resolve_stream(video_id, current_id=current_id)
