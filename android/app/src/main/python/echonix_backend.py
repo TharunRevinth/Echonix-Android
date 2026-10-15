@@ -15,6 +15,8 @@ creds_file_path = None
 ytm_cache_path = None
 _ytm_lock = threading.Lock()
 _download_semaphore = threading.Semaphore(2)
+STREAM_CLIENT_CHAIN = [['android_vr'], None]
+DOWNLOAD_STATUS = {}
 
 def init_ytmusic(creds_dir):
     global ytm, creds_file_path, ytm_cache_path
@@ -510,7 +512,8 @@ def resolve_stream(video_id):
                     "ext": "m4a",
                     "headers": {},
                     "expires_at": int(time.time()) + 86400 * 365,
-                    "is_local": True
+                    "is_local": True,
+                    "client": "local"
                 })
             # 2. Legacy check:
             if os.path.exists(dl_dir):
@@ -530,57 +533,70 @@ def resolve_stream(video_id):
                                         "ext": ext,
                                         "headers": {},
                                         "expires_at": int(time.time()) + 86400 * 365,
-                                        "is_local": True
+                                        "is_local": True,
+                                        "client": "local"
                                     })
                         except:
                             pass
 
-        opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio',
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-            'socket_timeout': 30,
-            'geo_bypass': True,
-            'nocheckcertificate': True,
-            'http_headers': {
-                'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['android_vr']}
-            }
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
-            stream_url = info.get('url')
-            if not stream_url:
-                formats = info.get('formats') or []
-                for f in reversed(formats):
-                    if f.get('vcodec') == 'none' and f.get('url'):
-                        stream_url = f.get('url')
-                        break
-            if not stream_url:
-                return json.dumps({"success": False, "error": "No stream URL found."})
-
-            ext = info.get('ext', 'm4a')
-            headers = info.get('http_headers', {})
-            expires_at = int(time.time()) + 1800
+        attempts = []
+        for client_spec in STREAM_CLIENT_CHAIN:
+            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
             try:
-                parsed_url = urllib.parse.urlparse(stream_url)
-                params = urllib.parse.parse_qs(parsed_url.query)
-                if 'expire' in params:
-                    expires_at = int(params['expire'][0]) - 300
-            except:
-                pass
+                opts = {
+                    'format': 'bestaudio[ext=m4a]/bestaudio',
+                    'quiet': True,
+                    'no_warnings': True,
+                    'noplaylist': True,
+                    'socket_timeout': 30,
+                    'geo_bypass': True,
+                    'nocheckcertificate': True,
+                }
+                if client_spec is not None:
+                    opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
 
-            return json.dumps({
-                "success": True,
-                "url": stream_url,
-                "ext": ext,
-                "headers": headers,
-                "expires_at": expires_at,
-                "is_local": False
-            })
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
+                    stream_url = info.get('url')
+                    if not stream_url:
+                        formats = info.get('formats') or []
+                        for f in reversed(formats):
+                            if f.get('vcodec') == 'none' and f.get('url'):
+                                stream_url = f.get('url')
+                                break
+                    if not stream_url:
+                        attempts.append({"client": client_name, "error": "No stream URL found in format list"})
+                        continue
+
+                    ext = info.get('ext', 'm4a')
+                    headers = info.get('http_headers', {})
+                    expires_at = int(time.time()) + 1800
+                    try:
+                        parsed_url = urllib.parse.urlparse(stream_url)
+                        params = urllib.parse.parse_qs(parsed_url.query)
+                        if 'expire' in params:
+                            expires_at = int(params['expire'][0]) - 300
+                    except:
+                        pass
+
+                    return json.dumps({
+                        "success": True,
+                        "url": stream_url,
+                        "ext": ext,
+                        "headers": headers,
+                        "expires_at": expires_at,
+                        "is_local": False,
+                        "client": client_name
+                    })
+            except Exception as e:
+                attempts.append({"client": client_name, "error": str(e)})
+
+        last_error = attempts[-1]["error"] if attempts else "All client extractions failed"
+        return json.dumps({
+            "success": False,
+            "error": last_error,
+            "attempts": attempts
+        })
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
@@ -590,41 +606,123 @@ def resolve_stream_download(video_id):
         tmp_dir = os.path.join(ytm_cache_path, "tmp_audio")
         os.makedirs(tmp_dir, exist_ok=True)
         out_tmpl = os.path.join(tmp_dir, f"{video_id}.%(ext)s")
-        opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio',
-            'outtmpl': out_tmpl,
-            'quiet': True,
-            'no_warnings': True,
-            'noplaylist': True,
-            'socket_timeout': 30,
-            'geo_bypass': True,
-            'nocheckcertificate': True,
-            'http_headers': {
-                'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['android_vr']}
-            }
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
-            ext = info.get('ext', 'm4a')
-            final_path = os.path.join(tmp_dir, f"{video_id}.{ext}")
-            if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
-                return json.dumps({
-                    "success": True,
-                    "url": final_path,
-                    "ext": ext,
-                    "headers": {},
-                    "expires_at": int(time.time()) + 86400 * 365,
-                    "is_local": True
-                })
-            return json.dumps({"success": False, "error": "Download produced empty file."})
+        attempts = []
+        for client_spec in STREAM_CLIENT_CHAIN:
+            client_name = "android_vr" if client_spec == ['android_vr'] else "default"
+            try:
+                opts = {
+                    'format': 'bestaudio[ext=m4a]/bestaudio',
+                    'outtmpl': out_tmpl,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'noplaylist': True,
+                    'socket_timeout': 30,
+                    'geo_bypass': True,
+                    'nocheckcertificate': True,
+                }
+                if client_spec is not None:
+                    opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
+                    ext = info.get('ext', 'm4a')
+                    final_path = os.path.join(tmp_dir, f"{video_id}.{ext}")
+                    if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
+                        return json.dumps({
+                            "success": True,
+                            "url": final_path,
+                            "ext": ext,
+                            "headers": {},
+                            "expires_at": int(time.time()) + 86400 * 365,
+                            "is_local": True,
+                            "client": client_name
+                        })
+            except Exception as e:
+                attempts.append({"client": client_name, "error": str(e)})
+        last_error = attempts[-1]["error"] if attempts else "Download produced empty file."
+        return json.dumps({"success": False, "error": last_error, "attempts": attempts})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 
 def get_stream_url(video_id):
     return resolve_stream(video_id)
+
+def diagnose_stream(video_id):
+    results = []
+    for client_spec in STREAM_CLIENT_CHAIN:
+        client_name = "android_vr" if client_spec == ['android_vr'] else "default"
+        t0 = time.time()
+        try:
+            opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio',
+                'quiet': True,
+                'no_warnings': True,
+                'noplaylist': True,
+                'socket_timeout': 30,
+                'geo_bypass': True,
+                'nocheckcertificate': True,
+            }
+            if client_spec is not None:
+                opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=False)
+                stream_url = info.get('url')
+                if not stream_url:
+                    formats = info.get('formats') or []
+                    for f in reversed(formats):
+                        if f.get('vcodec') == 'none' and f.get('url'):
+                            stream_url = f.get('url')
+                            break
+
+                elapsed_ms = int((time.time() - t0) * 1000)
+                if not stream_url:
+                    results.append({
+                        "client": client_name,
+                        "ok": False,
+                        "ms": elapsed_ms,
+                        "error": "No stream url found in formats",
+                        "http_status": None
+                    })
+                    continue
+
+                headers = info.get('http_headers', {})
+                req = urllib.request.Request(stream_url, headers=headers, method='HEAD')
+                http_status = None
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        http_status = resp.status
+                except urllib.error.HTTPError as he:
+                    if he.code in (405, 403):
+                        req2 = urllib.request.Request(stream_url, headers={**headers, 'Range': 'bytes=0-1'})
+                        try:
+                            with urllib.request.urlopen(req2, timeout=10) as resp2:
+                                http_status = resp2.status
+                        except urllib.error.HTTPError as he2:
+                            http_status = he2.code
+                        except Exception:
+                            http_status = he.code
+                    else:
+                        http_status = he.code
+                except Exception:
+                    pass
+
+                ok = http_status is not None and (200 <= http_status < 400)
+                results.append({
+                    "client": client_name,
+                    "ok": ok,
+                    "ms": elapsed_ms,
+                    "error": None if ok else f"HTTP {http_status}",
+                    "http_status": http_status
+                })
+        except Exception as e:
+            elapsed_ms = int((time.time() - t0) * 1000)
+            results.append({
+                "client": client_name,
+                "ok": False,
+                "ms": elapsed_ms,
+                "error": str(e),
+                "http_status": None
+            })
+    return json.dumps({"success": True, "diagnostics": results})
 
 
 def _extract_http_status(e):
@@ -766,13 +864,19 @@ def get_library_playlists(limit=50):
         return json.dumps({"success": False, "error": str(e), "http_status": _extract_http_status(e)})
 
 def download_song(video_id, title, artist, thumbnail_url="", playlist_name=""):
+    DOWNLOAD_STATUS[video_id] = {
+        "state": "queued",
+        "progress": 0.0,
+        "error": None
+    }
     t = threading.Thread(target=_download_song_thread, args=(video_id, title, artist, thumbnail_url, playlist_name))
     t.start()
-    return json.dumps({"success": True, "message": "Download started in background"})
+    return json.dumps({"success": True, "message": "Download queued"})
 
 def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_name=""):
     global ytm_cache_path
     if not ytm_cache_path:
+        DOWNLOAD_STATUS[video_id] = {"state": "failed", "progress": 0.0, "error": "Not initialized"}
         return
     dl_dir = os.path.join(ytm_cache_path, "downloads")
     os.makedirs(dl_dir, exist_ok=True)
@@ -783,6 +887,11 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
     final_meta = os.path.join(dl_dir, f"{video_id}.m4a.json")
 
     with _download_semaphore:
+        DOWNLOAD_STATUS[video_id] = {
+            "state": "downloading",
+            "progress": 0.0,
+            "error": None
+        }
         try:
             # Clean up any leftover partial files
             for p in (part_audio, part_meta):
@@ -792,22 +901,42 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
                     except:
                         pass
 
-            opts = {
-                'format': 'bestaudio[ext=m4a]/bestaudio',
-                'outtmpl': part_audio,
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
-                'nocheckcertificate': True,
-                'http_headers': {
-                    'User-Agent': 'com.google.android.apps.youtube.music/5.28.1 (Linux; U; Android 11) gzip',
-                },
-                'extractor_args': {
-                    'youtube': {'player_client': ['android_music', 'ios', 'android', 'web']}
-                }
-            }
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
+            def progress_hook(d):
+                if d.get('status') == 'downloading':
+                    downloaded = d.get('downloaded_bytes', 0)
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+                    prog = min(1.0, max(0.0, float(downloaded) / float(total)))
+                    DOWNLOAD_STATUS[video_id] = {
+                        "state": "downloading",
+                        "progress": prog,
+                        "error": None
+                    }
+
+            download_success = False
+            last_err = None
+            for client_spec in STREAM_CLIENT_CHAIN:
+                try:
+                    opts = {
+                        'format': 'bestaudio[ext=m4a]/bestaudio',
+                        'outtmpl': part_audio,
+                        'quiet': True,
+                        'no_warnings': True,
+                        'noplaylist': True,
+                        'nocheckcertificate': True,
+                        'progress_hooks': [progress_hook],
+                    }
+                    if client_spec is not None:
+                        opts['extractor_args'] = {'youtube': {'player_client': client_spec}}
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
+                    if os.path.exists(part_audio) and os.path.getsize(part_audio) > 1000:
+                        download_success = True
+                        break
+                except Exception as ex:
+                    last_err = ex
+
+            if not download_success:
+                raise last_err or Exception("Download failed on all client chains")
 
             # Fetch lyrics
             lyrics_data = None
@@ -818,7 +947,7 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
                         "synced": l_res.get("synced", False),
                         "lyrics": l_res.get("lyrics", "")
                     }
-            except Exception as lex:
+            except Exception:
                 pass
 
             meta_data = {
@@ -837,6 +966,12 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
             os.replace(part_audio, final_audio)
             os.replace(part_meta, final_meta)
 
+            DOWNLOAD_STATUS[video_id] = {
+                "state": "done",
+                "progress": 1.0,
+                "error": None
+            }
+
         except Exception as e:
             # Delete partial files if download failed
             for p in (part_audio, part_meta):
@@ -845,7 +980,14 @@ def _download_song_thread(video_id, title, artist, thumbnail_url="", playlist_na
                         os.remove(p)
                     except:
                         pass
-            print(f"Download error for {video_id}: {e}")
+            DOWNLOAD_STATUS[video_id] = {
+                "state": "failed",
+                "progress": 0.0,
+                "error": str(e)
+            }
+
+def get_download_status():
+    return json.dumps({"success": True, "status": DOWNLOAD_STATUS})
 
 def delete_downloaded_song(video_id):
     global ytm_cache_path
@@ -986,6 +1128,7 @@ def get_downloaded_songs():
                     audio_path = os.path.join(dl_dir, fname.replace(".json", ""))
                     if os.path.exists(audio_path):
                         data["path"] = audio_path
+                        data["size_bytes"] = os.path.getsize(audio_path)
                         songs.append(data)
                 except:
                     pass
@@ -1057,6 +1200,8 @@ WHITELIST = {
     'remove_playlist_items': remove_playlist_items,
     'get_library_playlists': get_library_playlists,
     'get_up_next': get_up_next,
+    'diagnose_stream': diagnose_stream,
+    'get_download_status': get_download_status,
 }
 
 def dispatch(fn_name: str, args_json: str) -> str:

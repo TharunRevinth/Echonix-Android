@@ -113,6 +113,14 @@ class PythonBackend {
     return _call('resolve_stream_download', {'video_id': videoId}, lane: lane);
   }
 
+  static Future<Map<String, dynamic>> diagnoseStream(String videoId) async {
+    return _call('diagnose_stream', {'video_id': videoId}, lane: 'priority');
+  }
+
+  static Future<Map<String, dynamic>> getDownloadStatus() async {
+    return _call('get_download_status', {}, lane: 'background');
+  }
+
   static Future<Map<String, dynamic>> rateSong(String videoId, String rating) async {
     return _call('rate_song', {'video_id': videoId, 'rating': rating}, lane: 'priority');
   }

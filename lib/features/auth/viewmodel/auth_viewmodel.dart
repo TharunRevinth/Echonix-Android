@@ -37,14 +37,12 @@ class AuthViewModel extends _$AuthViewModel {
       password: password,
     );
 
-    final val = switch (res) {
-      Left(value: final l) => state = AsyncValue.error(
-          l.message,
-          StackTrace.current,
-        ),
-      Right(value: final r) => state = AsyncValue.data(r),
-    };
-    print(val);
+    switch (res) {
+      case Left(value: final l):
+        state = AsyncValue.error(l.message, StackTrace.current);
+      case Right(value: final r):
+        state = AsyncValue.data(r);
+    }
   }
 
   Future<void> loginUser({
@@ -57,14 +55,12 @@ class AuthViewModel extends _$AuthViewModel {
       password: password,
     );
 
-    final val = switch (res) {
-      Left(value: final l) => state = AsyncValue.error(
-          l.message,
-          StackTrace.current,
-        ),
-      Right(value: final r) => _loginSuccess(r),
-    };
-    print(val);
+    switch (res) {
+      case Left(value: final l):
+        state = AsyncValue.error(l.message, StackTrace.current);
+      case Right(value: final r):
+        _loginSuccess(r);
+    }
   }
 
   AsyncValue<UserModel>? _loginSuccess(UserModel user) {

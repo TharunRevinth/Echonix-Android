@@ -18,9 +18,9 @@ import java.util.concurrent.Executors
 class ChaquopyPlugin : FlutterPlugin, MethodCallHandler {
     private lateinit var channel: MethodChannel
 
-    // Two thread pools: priority (2 threads) and background (3 threads)
+    // Two thread pools: priority (2 threads) and background (2 threads)
     private val priorityExecutor: ExecutorService = Executors.newFixedThreadPool(2)
-    private val backgroundExecutor: ExecutorService = Executors.newFixedThreadPool(3)
+    private val backgroundExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -35,10 +35,11 @@ class ChaquopyPlugin : FlutterPlugin, MethodCallHandler {
                 val args: String = call.argument<String>("args") ?: "{}"
                 val requestedLane: String = call.argument<String>("lane") ?: "background"
 
-                // Priority lane is used ONLY for get_stream_url, resolve_stream, rate_song, login_with_cookie, check_auth_status, init_ytmusic
+                // Priority lane is used ONLY for get_stream_url, resolve_stream, diagnose_stream, rate_song, login_with_cookie, check_auth_status, init_ytmusic
                 val isPriority = requestedLane == "priority" || fn in setOf(
                     "get_stream_url",
                     "resolve_stream",
+                    "diagnose_stream",
                     "rate_song",
                     "login_with_cookie",
                     "check_auth_status",

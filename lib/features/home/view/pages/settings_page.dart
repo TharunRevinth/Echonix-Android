@@ -6,6 +6,7 @@ import 'package:client/core/sync/sync_service.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
 import 'package:client/features/home/view/pages/home_page.dart';
 import 'package:client/features/home/viewmodel/home_viewmodel.dart';
+import 'package:client/core/widgets/stream_diagnostics_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -987,6 +988,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   ),
                                 ),
                               ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Developer Section
+                      GlassSurface(
+                        borderRadius: 20,
+                        blurSigma: 18,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.developer_mode_rounded, color: Colors.cyanAccent, size: 24),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Developer',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.network_check_rounded, color: Colors.cyanAccent),
+                              title: const Text('Test stream', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Diagnose stream resolution across client chain', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 16),
+                              onTap: () => showStreamDiagnosticsDialog(context, ref),
                             ),
                           ],
                         ),

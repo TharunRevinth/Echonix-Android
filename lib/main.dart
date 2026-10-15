@@ -6,29 +6,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:just_audio_background/just_audio_background.dart';
+
 void main() async {
-  debugPrint('[Echonix] 1. main() invoked');
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint('[Echonix] 2. WidgetsFlutterBinding initialized');
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    debugPrint('[Echonix][Error] ${details.exceptionAsString()} \n${details.stack}');
+    if (kDebugMode) {
+      debugPrint('[Echonix][Error] ${details.exceptionAsString()} \n${details.stack}');
+    }
   };
 
-  debugPrint('[Echonix] 3. calling getApplicationDocumentsDirectory()');
-  final dir = await getApplicationDocumentsDirectory();
-  debugPrint('[Echonix] 4. getApplicationDocumentsDirectory resolved: ${dir.path}');
-  Hive.defaultDirectory = dir.path;
-  debugPrint('[Echonix] 5. Hive.defaultDirectory set');
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.echonix.music.channel.audio',
+      androidNotificationChannelName: 'Audio playback',
+      androidNotificationOngoing: false,
+      androidStopForegroundOnPause: true,
+      androidNotificationIcon: 'drawable/ic_notification',
+    );
+  } catch (e, st) {
+    debugPrint('[Echonix][Init] JustAudioBackground.init failed: $e\n$st');
+  }
 
-  debugPrint('[Echonix] 6. calling runApp()');
+  final dir = await getApplicationDocumentsDirectory();
+  Hive.defaultDirectory = dir.path;
+
   runApp(
     const ProviderScope(
       child: MyApp(),
     ),
   );
-  debugPrint('[Echonix] 7. runApp() completed');
 }
 
 class MyApp extends ConsumerWidget {
@@ -36,7 +46,6 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    debugPrint('[Echonix] 8. MyApp build() entered');
     // Eagerly trigger bootstrap on first frame
     ref.watch(bootstrapProvider);
 

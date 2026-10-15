@@ -5,6 +5,8 @@ import 'package:client/features/home/view/pages/settings_page.dart';
 import 'package:client/features/home/view/pages/songs_page.dart';
 import 'package:client/features/home/view/widgets/music_player.dart';
 import 'package:client/features/home/view/widgets/music_slab.dart';
+import 'package:client/core/providers/current_song_notifier.dart';
+import 'package:client/core/widgets/stream_diagnostics_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,7 +66,24 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    print('[Echonix] 9. HomePage build() entered');
+    ref.listen<String?>(playbackErrorProvider, (previous, next) {
+      if (next != null && next.isNotEmpty) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next),
+            action: SnackBarAction(
+              label: 'Details',
+              onPressed: () {
+                final currentSong = ref.read(currentSongNotifierProvider);
+                showStreamDiagnosticsDialog(context, ref, currentSong?.id);
+              },
+            ),
+          ),
+        );
+      }
+    });
+
     final selectedIndex = ref.watch(homeTabIndexProvider);
     final bottomInset = MediaQuery.of(context).padding.bottom;
 

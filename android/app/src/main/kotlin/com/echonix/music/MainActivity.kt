@@ -2,11 +2,11 @@ package com.echonix.music
 
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.BassBoost
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity: FlutterActivity() {
+class MainActivity: AudioServiceActivity() {
     private val CHANNEL = "com.echonix.music/audio_effects"
     private var virtualizer: Virtualizer? = null
     private var bassBoost: BassBoost? = null

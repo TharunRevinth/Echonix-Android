@@ -140,12 +140,12 @@ class HomeViewModel extends _$HomeViewModel {
       token: ref.read(currentUserNotifierProvider)!.token,
     );
 
-    final val = switch (res) {
-      Left(value: final l) => state =
-          AsyncValue.error(l.message, StackTrace.current),
-      Right(value: final r) => state = AsyncValue.data(r),
-    };
-    print(val);
+    switch (res) {
+      case Left(value: final l):
+        state = AsyncValue.error(l.message, StackTrace.current);
+      case Right(value: final r):
+        state = AsyncValue.data(r);
+    }
   }
 
   List<SongModel> getRecentlyPlayedSongs() {
@@ -159,12 +159,12 @@ class HomeViewModel extends _$HomeViewModel {
       token: ref.read(currentUserNotifierProvider)!.token,
     );
 
-    final val = switch (res) {
-      Left(value: final l) => state =
-          AsyncValue.error(l.message, StackTrace.current),
-      Right(value: final r) => _favSongSuccess(r, songId),
-    };
-    print(val);
+    switch (res) {
+      case Left(value: final l):
+        state = AsyncValue.error(l.message, StackTrace.current);
+      case Right(value: final r):
+        _favSongSuccess(r, songId);
+    }
   }
 
   AsyncValue _favSongSuccess(bool isFavorited, String songId) {

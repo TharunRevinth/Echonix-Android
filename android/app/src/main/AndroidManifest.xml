@@ -12,6 +12,7 @@
         android:name="com.chaquo.python.android.PyApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
         
         <meta-data
@@ -24,7 +25,7 @@
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_notification" />
         <activity
-            android:name="com.ryanheise.audioservice.AudioServiceActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

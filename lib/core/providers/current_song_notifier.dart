@@ -23,6 +23,7 @@ final shuffleProvider = StateProvider<bool>((ref) => false);
 final repeatModeProvider = StateProvider<LoopMode>((ref) => LoopMode.off);
 final isPlayerLoadingProvider = StateProvider<bool>((ref) => false);
 final queueVersionProvider = StateProvider<int>((ref) => 0);
+final playbackErrorProvider = StateProvider<String?>((ref) => null);
 
 class AutoplayNotifier extends StateNotifier<bool> {
   AutoplayNotifier() : super(true) {
@@ -75,6 +76,7 @@ class LocalRedirectServer {
   final String serverToken = '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1000000)}';
 
   final Map<String, _StreamCacheEntry> _cache = {};
+  final Map<String, Future<_StreamCacheEntry?>> _inflight = {};
   final HttpClient _httpClient = HttpClient()..autoUncompress = false;
 
   Future<void> start() async {
@@ -88,39 +90,70 @@ class LocalRedirectServer {
         }
       }, onError: (_) {});
     } catch (e, st) {
-      debugPrint("LocalRedirectServer Bind Error: $e\n$st");
+      if (kDebugMode) debugPrint("LocalRedirectServer Bind Error: $e\n$st");
     }
+  }
+
+  Future<_StreamCacheEntry?> _resolve(String id, {required String lane}) {
+    if (id.isEmpty) return Future.value(null);
+    final cached = _cache[id];
+    if (cached != null && !cached.isExpired) {
+      return Future.value(cached);
+    }
+    final existingFuture = _inflight[id];
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final sw = Stopwatch()..start();
+    final future = PythonBackend.resolveStream(id, lane: lane).then((res) {
+      if (res['success'] == true && res['url'] != null) {
+        final url = res['url'] as String;
+        final ext = res['ext'] as String? ?? 'm4a';
+        final rawHeaders = res['headers'];
+        final headers = <String, String>{};
+        if (rawHeaders is Map) {
+          rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
+        }
+        final expiresEpoch = (res['expires_at'] as num?)?.toInt() ??
+            (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
+        final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
+        final isLocal = res['is_local'] == true || url.startsWith('/');
+        final client = res['client'] ?? 'default';
+
+        if (kDebugMode) {
+          debugPrint('[Echonix][stream] resolve id=$id client=$client ms=${sw.elapsedMilliseconds}');
+        }
+
+        final entry = _StreamCacheEntry(
+          url: url,
+          ext: ext,
+          headers: headers,
+          expiresAt: expiresAt,
+          isLocal: isLocal,
+        );
+        _cache[id] = entry;
+        return entry;
+      }
+      return null;
+    }).catchError((e) {
+      if (kDebugMode) {
+        debugPrint('[Echonix][stream] resolve error for $id: $e');
+      }
+      return null;
+    }).whenComplete(() {
+      _inflight.remove(id);
+    });
+
+    _inflight[id] = future;
+    return future;
   }
 
   void prefetch(String videoId) {
     if (videoId.isEmpty) return;
     final cached = _cache[videoId];
     if (cached != null && !cached.isExpired) return;
-
-    PythonBackend.resolveStream(videoId, lane: 'background').then((res) {
-      if (res['success'] == true) {
-        final url = res['url'] as String?;
-        if (url != null && url.isNotEmpty) {
-          final ext = res['ext'] as String? ?? 'm4a';
-          final rawHeaders = res['headers'];
-          final headers = <String, String>{};
-          if (rawHeaders is Map) {
-            rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
-          }
-          final expiresEpoch = (res['expires_at'] as num?)?.toInt() ??
-              (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
-          final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
-          final isLocal = res['is_local'] == true || url.startsWith('/');
-          _cache[videoId] = _StreamCacheEntry(
-            url: url,
-            ext: ext,
-            headers: headers,
-            expiresAt: expiresAt,
-            isLocal: isLocal,
-          );
-        }
-      }
-    }).catchError((_) {});
+    _resolve(videoId, lane: 'background');
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -138,39 +171,8 @@ class LocalRedirectServer {
       return;
     }
 
-    _StreamCacheEntry? entry = _cache[videoId];
-    if (entry != null && entry.isExpired) {
-      _cache.remove(videoId);
-      entry = null;
-    }
-
     final sw = Stopwatch()..start();
-
-    if (entry == null) {
-      final res = await PythonBackend.resolveStream(videoId, lane: 'priority');
-      if (res['success'] == true && res['url'] != null) {
-        final url = res['url'] as String;
-        final ext = res['ext'] as String? ?? 'm4a';
-        final rawHeaders = res['headers'];
-        final headers = <String, String>{};
-        if (rawHeaders is Map) {
-          rawHeaders.forEach((k, v) => headers[k.toString()] = v.toString());
-        }
-        final expiresEpoch = (res['expires_at'] as num?)?.toInt() ??
-            (DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1800);
-        final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresEpoch * 1000);
-        final isLocal = res['is_local'] == true || url.startsWith('/');
-        entry = _StreamCacheEntry(
-          url: url,
-          ext: ext,
-          headers: headers,
-          expiresAt: expiresAt,
-          isLocal: isLocal,
-        );
-        _cache[videoId] = entry;
-        debugPrint('[Echonix][stream] resolve id=$videoId mode=direct ms=${sw.elapsedMilliseconds}');
-      }
-    }
+    _StreamCacheEntry? entry = await _resolve(videoId, lane: 'priority');
 
     if (entry == null) {
       entry = await _fallbackDownload(videoId, sw);
@@ -483,12 +485,21 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   ConcatenatingAudioSource? _playlistSource;
   LocalRedirectServer? _redirectServer;
   Future<void>? _serverStartFuture;
+  Timer? _autoplayTimer;
+  bool _hasAutoplayRunForCurrent = false;
+
+  void _scheduleAutoplayCheck() {
+    _autoplayTimer?.cancel();
+    _autoplayTimer = null;
+    _hasAutoplayRunForCurrent = false;
+  }
 
   @override
   SongModel? build() {
     _initRedirectServer();
     _initAudioPlayer();
     ref.onDispose(() {
+      _autoplayTimer?.cancel();
       _redirectServer?.stop();
       audioPlayer?.dispose();
     });
@@ -513,7 +524,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         );
         audioPlayer = AudioPlayer(audioPipeline: pipeline);
       } catch (e) {
-        print("Failed to initialize equalizer: $e");
+        if (kDebugMode) debugPrint("[Echonix][EQ] Failed to initialize equalizer: $e");
         audioPlayer = AudioPlayer();
       }
 
@@ -522,6 +533,9 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
           try {
             const channel = MethodChannel('com.echonix.music/audio_effects');
             await channel.invokeMethod('initEffects', {'sessionId': sessionId});
+            if (kDebugMode) {
+              debugPrint('[Echonix][effects] initEffects success for sessionId $sessionId');
+            }
             
             final prefs = await SharedPreferences.getInstance();
             final virtStrength = prefs.getInt('virtualizer_strength') ?? 0;
@@ -529,7 +543,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
             await channel.invokeMethod('setVirtualizerStrength', {'strength': virtStrength});
             await channel.invokeMethod('setBassBoostStrength', {'strength': bassStrength});
           } catch (e) {
-            print("Failed to initialize native audio effects: $e");
+            if (kDebugMode) debugPrint("[Echonix][effects] Failed to initialize native audio effects: $e");
           }
         }
       });
@@ -537,11 +551,22 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       audioPlayer = AudioPlayer();
     }
 
-    // Read persisted shuffle state and apply to player
+    // Set shuffle mode to false on player once
+    audioPlayer!.setShuffleModeEnabled(false);
+
+    // Subscribe to playback errors
+    audioPlayer!.playbackEventStream.listen(
+      (_) {},
+      onError: (Object e, StackTrace st) {
+        if (kDebugMode) debugPrint('[Echonix][Player] PlaybackEvent error: $e');
+        ref.read(playbackErrorProvider.notifier).state = e.toString();
+      },
+    );
+
+    // Read persisted shuffle state
     SharedPreferences.getInstance().then((prefs) {
       final shuffleEnabled = prefs.getBool('shuffle_enabled') ?? false;
       ref.read(shuffleProvider.notifier).state = shuffleEnabled;
-      audioPlayer!.setShuffleModeEnabled(shuffleEnabled);
     });
 
     // Read persisted repeat mode and apply to player (default LoopMode.off)
@@ -577,12 +602,18 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
           _redirectServer?.prefetch(playlist[nextIndex].id);
         }
 
-        checkAutoplay();
+        _scheduleAutoplayCheck();
       }
     });
 
     // Position-based tracker: min(30s, 50% duration)
     audioPlayer!.positionStream.listen((position) {
+      if (!_hasAutoplayRunForCurrent && position >= const Duration(seconds: 10)) {
+        _hasAutoplayRunForCurrent = true;
+        if (!ref.read(isPlayerLoadingProvider)) {
+          checkAutoplay();
+        }
+      }
       if (position.inMilliseconds > _maxPositionMs) {
         _maxPositionMs = position.inMilliseconds;
       }
@@ -681,6 +712,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
   }
 
   void updatePlaylist(List<SongModel> songs, int index) async {
+    ref.read(playbackErrorProvider.notifier).state = null;
     final requestId = ++_playRequestId;
 
     if (!_notificationPermissionRequested) {
@@ -698,7 +730,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 
       _initAudioPlayer();
       try {
-        await audioPlayer!.stop();
+        unawaited(audioPlayer!.pause());
       } catch (_) {}
       if (requestId != _playRequestId) return;
 
@@ -734,15 +766,21 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       _needsEqReapply = true;
       if (requestId != _playRequestId) return;
 
+      if (ref.read(shuffleProvider)) {
+        await _shuffleUpcoming();
+        if (requestId != _playRequestId) return;
+      }
+
       final repeatMode = ref.read(repeatModeProvider);
       await audioPlayer!.setLoopMode(repeatMode);
       if (requestId != _playRequestId) return;
 
       await audioPlayer!.play();
       isPlaying = true;
-      checkAutoplay();
+      _scheduleAutoplayCheck();
     } catch (e, st) {
-      debugPrint("Echonix Playback Error: $e\n$st");
+      if (kDebugMode) debugPrint("[Echonix][Player] Playback Error: $e\n$st");
+      ref.read(playbackErrorProvider.notifier).state = e.toString();
     }
   }
 
@@ -854,7 +892,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
       currentSongIndex--;
     }
     ref.read(queueVersionProvider.notifier).state++;
-    checkAutoplay();
+    _scheduleAutoplayCheck();
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -884,6 +922,30 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     ref.read(queueVersionProvider.notifier).state++;
   }
 
+  Future<void> _shuffleUpcoming() async {
+    if (playlist.length <= currentSongIndex + 1 || currentSongIndex < 0) return;
+    _unshuffledPlaylist = List<SongModel>.from(playlist);
+
+    final prefix = playlist.sublist(0, currentSongIndex + 1);
+    final rest = List<SongModel>.from(playlist.sublist(currentSongIndex + 1));
+
+    final rand = Random();
+    for (int i = rest.length - 1; i > 0; i--) {
+      final j = rand.nextInt(i + 1);
+      final temp = rest[i];
+      rest[i] = rest[j];
+      rest[j] = temp;
+    }
+
+    playlist = [...prefix, ...rest];
+
+    if (_playlistSource != null && _playlistSource!.length > currentSongIndex + 1) {
+      await _playlistSource!.removeRange(currentSongIndex + 1, _playlistSource!.length);
+      await _playlistSource!.addAll(rest.map(_buildAudioSource).toList());
+    }
+    ref.read(queueVersionProvider.notifier).state++;
+  }
+
   void toggleShuffle() async {
     if (audioPlayer == null) return;
     final current = ref.read(shuffleProvider);
@@ -894,29 +956,7 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
     await prefs.setBool('shuffle_enabled', newVal);
 
     if (newVal) {
-      _unshuffledPlaylist = List<SongModel>.from(playlist);
-
-      if (playlist.length > currentSongIndex + 1 && currentSongIndex >= 0) {
-        final prefix = playlist.sublist(0, currentSongIndex + 1);
-        final rest = List<SongModel>.from(playlist.sublist(currentSongIndex + 1));
-
-        final rand = Random();
-        for (int i = rest.length - 1; i > 0; i--) {
-          final j = rand.nextInt(i + 1);
-          final temp = rest[i];
-          rest[i] = rest[j];
-          rest[j] = temp;
-        }
-
-        playlist = [...prefix, ...rest];
-
-        if (_playlistSource != null) {
-          while (_playlistSource!.length > currentSongIndex + 1) {
-            await _playlistSource!.removeAt(_playlistSource!.length - 1);
-          }
-          await _playlistSource!.addAll(rest.map(_buildAudioSource).toList());
-        }
-      }
+      await _shuffleUpcoming();
     } else {
       if (_unshuffledPlaylist != null && _unshuffledPlaylist!.isNotEmpty) {
         final original = _unshuffledPlaylist!;
@@ -932,10 +972,8 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
         final prefix = playlist.sublist(0, currentSongIndex + 1);
         playlist = [...prefix, ...restFromOriginal];
 
-        if (_playlistSource != null) {
-          while (_playlistSource!.length > currentSongIndex + 1) {
-            await _playlistSource!.removeAt(_playlistSource!.length - 1);
-          }
+        if (_playlistSource != null && _playlistSource!.length > currentSongIndex + 1) {
+          await _playlistSource!.removeRange(currentSongIndex + 1, _playlistSource!.length);
           await _playlistSource!.addAll(restFromOriginal.map(_buildAudioSource).toList());
         }
       }
@@ -1234,7 +1272,7 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
         await bands[i].setGain(clampedGain);
       }
     } catch (e) {
-      print("Error applying EQ settings: $e");
+      if (kDebugMode) debugPrint("[Echonix][EQ] Error applying EQ settings: $e");
     }
   }
 
@@ -1247,7 +1285,7 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       const channel = MethodChannel('com.echonix.music/audio_effects');
       await channel.invokeMethod('setVirtualizerStrength', {'strength': strength});
     } catch (e) {
-      print("Failed to set native virtualizer strength: $e");
+      if (kDebugMode) debugPrint("[Echonix][effects] Failed to set native virtualizer strength: $e");
     }
   }
 
@@ -1260,7 +1298,7 @@ class EqualizerNotifier extends StateNotifier<EqualizerSettings> {
       const channel = MethodChannel('com.echonix.music/audio_effects');
       await channel.invokeMethod('setBassBoostStrength', {'strength': strength});
     } catch (e) {
-      print("Failed to set native bass boost strength: $e");
+      if (kDebugMode) debugPrint("[Echonix][effects] Failed to set native bass boost strength: $e");
     }
   }
 }
