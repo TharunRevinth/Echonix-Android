@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
 import 'package:client/core/providers/dominant_color_provider.dart';
@@ -630,10 +629,10 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
                             _showSleepTimerDialog(context);
                           },
                           icon: Icon(
-                            ref.watch(sleepTimerProvider) > 0
+                            ref.watch(sleepTimerProvider) != null
                                 ? Icons.bedtime_rounded
                                 : Icons.bedtime_outlined,
-                            color: ref.watch(sleepTimerProvider) > 0
+                            color: ref.watch(sleepTimerProvider) != null
                                 ? Colors.blueAccent
                                 : Colors.white70,
                             size: 24,
@@ -710,10 +709,6 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
   Widget _buildLyricsView(BuildContext context, Color dynColor) {
     final screenWidth = MediaQuery.of(context).size.width;
     final size = screenWidth * 0.85;
-
-    final effectsMode = ref.watch(visualEffectsModeProvider);
-    final isReduced = effectsMode == VisualEffectsMode.reduced ||
-        (MediaQuery.maybeOf(context)?.disableAnimations ?? false);
 
     return Container(
       width: size,
@@ -794,38 +789,37 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
                             final line = _syncedLines[index];
                             final isActive = index == _currentLyricIndex;
                             final distance = (index - _currentLyricIndex).abs();
-                            final blurSigma = isReduced ? 0.0 : (distance * 0.6).clamp(0.0, 2.0);
 
-                            Widget lyricText = Text(
-                              line.text,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: isActive ? Colors.white : Colors.white.withOpacity(0.45),
-                                fontSize: isActive ? 21 : 16,
-                                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                                height: 1.6,
-                              ),
-                            );
-
-                            if (blurSigma > 0.0) {
-                              lyricText = ImageFiltered(
-                                imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-                                child: lyricText,
-                              );
-                            }
-
-                            return GestureDetector(
-                              key: _lyricKeys[index],
-                              onTap: () {
-                                final targetMs = (line.ms - _lyricsOffsetMs).clamp(0, 9999999);
-                                ref.read(currentSongNotifierProvider.notifier).audioPlayer?.seek(
-                                      Duration(milliseconds: targetMs),
-                                    );
-                              },
-                              behavior: HitTestBehavior.opaque,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-                                child: lyricText,
+                            return RepaintBoundary(
+                              child: GestureDetector(
+                                key: _lyricKeys[index],
+                                onTap: () {
+                                  final targetMs = (line.ms - _lyricsOffsetMs).clamp(0, 9999999);
+                                  ref.read(currentSongNotifierProvider.notifier).audioPlayer?.seek(
+                                        Duration(milliseconds: targetMs),
+                                      );
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutCubic,
+                                    opacity: isActive ? 1.0 : (distance <= 2 ? 0.50 : 0.25),
+                                    child: AnimatedDefaultTextStyle(
+                                      duration: const Duration(milliseconds: 200),
+                                      curve: Curves.easeOutCubic,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: isActive ? Colors.white : Colors.white70,
+                                        fontSize: isActive ? 22 : 16,
+                                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                                        height: 1.6,
+                                      ),
+                                      child: Text(line.text),
+                                    ),
+                                  ),
+                                ),
                               ),
                             );
                           },
@@ -848,8 +842,9 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
 
   void _showSleepTimerDialog(BuildContext context) {
     final timerNotifier = ref.read(sleepTimerProvider.notifier);
-    final remaining = ref.read(sleepTimerProvider);
-    final hasTimer = remaining > 0;
+    final endsAt = ref.read(sleepTimerProvider);
+    final hasTimer = endsAt != null && endsAt.isAfter(DateTime.now());
+    final remainingMinutes = hasTimer ? endsAt.difference(DateTime.now()).inMinutes + 1 : 0;
 
     showModalBottomSheet(
       context: context,
@@ -862,7 +857,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                hasTimer ? 'Sleep Timer Active (${(remaining / 60).ceil()}m left)' : 'Set Sleep Timer',
+                hasTimer ? 'Sleep Timer Active (${remainingMinutes}m left)' : 'Set Sleep Timer',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
               ),
               const SizedBox(height: 16),
@@ -871,7 +866,7 @@ class _MusicPlayerState extends ConsumerState<MusicPlayer> {
                   leading: const Icon(Icons.timer_off_outlined, color: Colors.redAccent),
                   title: const Text('Cancel Timer', style: TextStyle(color: Colors.redAccent)),
                   onTap: () {
-                    timerNotifier.setTimer(0);
+                    timerNotifier.stopTimer();
                     Navigator.pop(context);
                   },
                 ),

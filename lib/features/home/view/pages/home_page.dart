@@ -89,137 +89,135 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. Tab content pages with animated fade-through & 12px vertical slide (P5-T3 transition)
-          Positioned.fill(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 280),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0.0, 12.0 / 800.0),
-                  end: Offset.zero,
-                ).animate(animation);
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(position: slide, child: child),
-                );
-              },
-              child: KeyedSubtree(
-                key: ValueKey<int>(selectedIndex),
-                child: pages[selectedIndex],
+      body: PopScope(
+        canPop: _playerController.value < 0.05,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (_playerController.value >= 0.05) {
+            _closePlayer();
+          } else if (selectedIndex != 0) {
+            ref.read(homeTabIndexProvider.notifier).state = 0;
+          }
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1. Tab content pages with IndexedStack (prevents tab thrashing and dropped frames)
+            Positioned.fill(
+              child: IndexedStack(
+                index: selectedIndex,
+                children: pages,
               ),
             ),
-          ),
 
-          // 2. Floating Mini-Player (Positioned above floating tab bar)
-          Positioned(
-            bottom: 12 + bottomInset + 58 + 10,
-            left: 16,
-            right: 16,
-            child: AnimatedBuilder(
-              animation: _playerController,
-              builder: (context, child) {
-                final val = _playerController.value.clamp(0.0, 1.0);
-                final opacity = (1.0 - val * 2.5).clamp(0.0, 1.0);
-                if (opacity <= 0.0) return const SizedBox.shrink();
+            // 2. Floating Mini-Player (Positioned above floating tab bar)
+            Positioned(
+              bottom: 12 + bottomInset + 58 + 10,
+              left: 16,
+              right: 16,
+              child: AnimatedBuilder(
+                animation: _playerController,
+                builder: (context, child) {
+                  final val = _playerController.value.clamp(0.0, 1.0);
+                  final opacity = (1.0 - val * 2.5).clamp(0.0, 1.0);
+                  if (opacity <= 0.0) return const SizedBox.shrink();
 
-                return Opacity(
-                  opacity: opacity,
-                  child: child,
-                );
-              },
-              child: MusicSlab(
-                onOpenPlayer: _openPlayer,
-              ),
-            ),
-          ),
-
-          // 3. Floating Glass Tab Bar with sliding spring pill indicator
-          Positioned(
-            bottom: 12 + bottomInset,
-            left: 16,
-            right: 16,
-            child: AnimatedBuilder(
-              animation: _playerController,
-              builder: (context, child) {
-                final val = _playerController.value.clamp(0.0, 1.0);
-                final opacity = (1.0 - val * 2.5).clamp(0.0, 1.0);
-                final translateY = val * 80.0;
-                if (opacity <= 0.0) return const SizedBox.shrink();
-
-                return Opacity(
-                  opacity: opacity,
-                  child: Transform.translate(
-                    offset: Offset(0, translateY),
+                  return Opacity(
+                    opacity: opacity,
                     child: child,
-                  ),
-                );
-              },
-              child: GlassSurface(
-                borderRadius: 26,
-                blurSigma: 18,
-                height: 58,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Stack(
-                  children: [
-                    // Sliding filled pill indicator
-                    _SpringSlidingIndicator(
-                      selectedIndex: selectedIndex,
-                      tabCount: 4,
-                    ),
-                    // Tab items
-                    Row(
-                      children: [
-                        _buildTabItem(0, Icons.home_rounded, 'Home', selectedIndex),
-                        _buildTabItem(1, Icons.search_rounded, 'Search', selectedIndex),
-                        _buildTabItem(2, Icons.library_music_rounded, 'Library', selectedIndex),
-                        _buildTabItem(3, Icons.settings_rounded, 'Settings', selectedIndex),
-                      ],
-                    ),
-                  ],
+                  );
+                },
+                child: MusicSlab(
+                  onOpenPlayer: _openPlayer,
                 ),
               ),
             ),
-          ),
 
-          // 4. Draggable Full Player Sheet (Spring simulation)
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _playerController,
-              builder: (context, child) {
-                final val = _playerController.value;
-                if (val <= 0.001) return const SizedBox.shrink();
+            // 3. Floating Glass Tab Bar with sliding spring pill indicator
+            Positioned(
+              bottom: 12 + bottomInset,
+              left: 16,
+              right: 16,
+              child: AnimatedBuilder(
+                animation: _playerController,
+                builder: (context, child) {
+                  final val = _playerController.value.clamp(0.0, 1.0);
+                  final opacity = (1.0 - val * 2.5).clamp(0.0, 1.0);
+                  final translateY = val * 80.0;
+                  if (opacity <= 0.0) return const SizedBox.shrink();
 
-                final screenHeight = MediaQuery.of(context).size.height;
-                final offset = (1.0 - val.clamp(0.0, 1.0)) * screenHeight;
-
-                return Transform.translate(
-                  offset: Offset(0, offset),
-                  child: MusicPlayer(
-                    onClose: _closePlayer,
-                    dragProgress: val,
-                    onVerticalDragUpdate: (delta) {
-                      _playerController.value =
-                          (_playerController.value - delta / screenHeight).clamp(0.0, 1.0);
-                    },
-                    onVerticalDragEnd: (velocity) {
-                      final v = -velocity / screenHeight;
-                      if (v < -0.4 || _playerController.value < 0.6) {
-                        _closePlayer(velocity: v);
-                      } else {
-                        _openPlayer(velocity: v);
-                      }
-                    },
+                  return Opacity(
+                    opacity: opacity,
+                    child: Transform.translate(
+                      offset: Offset(0, translateY),
+                      child: child,
+                    ),
+                  );
+                },
+                child: GlassSurface(
+                  borderRadius: 26,
+                  blurSigma: 0,
+                  height: 58,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Stack(
+                    children: [
+                      // Sliding filled pill indicator
+                      _SpringSlidingIndicator(
+                        selectedIndex: selectedIndex,
+                        tabCount: 4,
+                      ),
+                      // Tab items
+                      Row(
+                        children: [
+                          _buildTabItem(0, Icons.home_rounded, 'Home', selectedIndex),
+                          _buildTabItem(1, Icons.search_rounded, 'Search', selectedIndex),
+                          _buildTabItem(2, Icons.library_music_rounded, 'Library', selectedIndex),
+                          _buildTabItem(3, Icons.settings_rounded, 'Settings', selectedIndex),
+                        ],
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
-        ],
+
+            // 4. Draggable Full Player Sheet (Spring simulation, cached child widget)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _playerController,
+                builder: (context, child) {
+                  final val = _playerController.value;
+                  if (val <= 0.001) return const SizedBox.shrink();
+
+                  final screenHeight = MediaQuery.of(context).size.height;
+                  final offset = (1.0 - val.clamp(0.0, 1.0)) * screenHeight;
+
+                  return Transform.translate(
+                    offset: Offset(0, offset),
+                    child: child,
+                  );
+                },
+                child: MusicPlayer(
+                  onClose: _closePlayer,
+                  onVerticalDragUpdate: (delta) {
+                    final screenHeight = MediaQuery.of(context).size.height;
+                    _playerController.value =
+                        (_playerController.value - delta / screenHeight).clamp(0.0, 1.0);
+                  },
+                  onVerticalDragEnd: (velocity) {
+                    final screenHeight = MediaQuery.of(context).size.height;
+                    final v = -velocity / screenHeight;
+                    if (v < -0.4 || _playerController.value < 0.6) {
+                      _closePlayer(velocity: v);
+                    } else {
+                      _openPlayer(velocity: v);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

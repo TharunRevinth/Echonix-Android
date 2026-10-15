@@ -1,17 +1,17 @@
 import 'dart:ui';
-import 'package:client/features/home/viewmodel/likes_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum VisualEffectsMode {
+  off,
+  balanced,
   full,
-  reduced,
 }
 
 class VisualEffectsNotifier extends StateNotifier<VisualEffectsMode> {
-  VisualEffectsNotifier() : super(VisualEffectsMode.full) {
+  VisualEffectsNotifier() : super(VisualEffectsMode.balanced) {
     _load();
   }
 
@@ -19,7 +19,13 @@ class VisualEffectsNotifier extends StateNotifier<VisualEffectsMode> {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('visual_effects_mode');
     if (saved != null) {
-      state = saved == 'reduced' ? VisualEffectsMode.reduced : VisualEffectsMode.full;
+      if (saved == 'off') {
+        state = VisualEffectsMode.off;
+      } else if (saved == 'full') {
+        state = VisualEffectsMode.full;
+      } else {
+        state = VisualEffectsMode.balanced;
+      }
     }
   }
 
@@ -30,7 +36,17 @@ class VisualEffectsNotifier extends StateNotifier<VisualEffectsMode> {
   }
 
   void toggle() {
-    setMode(state == VisualEffectsMode.full ? VisualEffectsMode.reduced : VisualEffectsMode.full);
+    switch (state) {
+      case VisualEffectsMode.off:
+        setMode(VisualEffectsMode.balanced);
+        break;
+      case VisualEffectsMode.balanced:
+        setMode(VisualEffectsMode.full);
+        break;
+      case VisualEffectsMode.full:
+        setMode(VisualEffectsMode.off);
+        break;
+    }
   }
 }
 
@@ -58,7 +74,73 @@ class GlassPhysics {
   }
 }
 
-class GlassSurface extends ConsumerWidget {
+/// GlassDock combines dock elements (such as bottom bar & mini-player) into a
+/// SINGLE offscreen BackdropFilter pass to eliminate Mali GPU fragment shader bottlenecks.
+class GlassDock extends ConsumerWidget {
+  final Widget child;
+  final double borderRadius;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+  final Color? tintColor;
+
+  const GlassDock({
+    super.key,
+    required this.child,
+    this.borderRadius = 26.0,
+    this.margin,
+    this.padding,
+    this.tintColor,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(visualEffectsModeProvider);
+    final disableAnimations = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final isOff = mode == VisualEffectsMode.off || disableAnimations;
+    final double sigma = isOff ? 0.0 : (mode == VisualEffectsMode.full ? 22.0 : 14.0);
+
+    final bgTint = (tintColor ?? const Color(0xFF140D20)).withValues(alpha: isOff ? 0.95 : 0.72);
+
+    Widget content = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: bgTint,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12),
+          width: 1.0,
+        ),
+      ),
+      child: child,
+    );
+
+    if (sigma > 0) {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: content,
+        ),
+      );
+    } else {
+      content = ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: content,
+      );
+    }
+
+    return RepaintBoundary(
+      child: Container(
+        margin: margin,
+        child: content,
+      ),
+    );
+  }
+}
+
+/// GlassSurface is an efficient static painted surface without BackdropFilter or multi-pass shadows,
+/// eliminating the 12+ offscreen render passes that choke mobile Mali GPUs.
+class GlassSurface extends StatelessWidget {
   final Widget child;
   final double borderRadius;
   final double blurSigma;
@@ -73,184 +155,45 @@ class GlassSurface extends ConsumerWidget {
   const GlassSurface({
     super.key,
     required this.child,
-    this.borderRadius = 22.0,
-    this.blurSigma = 18.0,
+    this.borderRadius = 16.0,
+    this.blurSigma = 0.0,
     this.padding,
     this.margin,
     this.width,
     this.height,
     this.tintColor,
-    this.showShadow = true,
+    this.showShadow = false,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final effectsMode = ref.watch(visualEffectsModeProvider);
-    final disableAnimations = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final isReduced = effectsMode == VisualEffectsMode.reduced || disableAnimations;
+  Widget build(BuildContext context) {
+    final dominantColor = tintColor ?? const Color(0xFF1A1326);
 
-    final dominantColor = tintColor ?? const Color(0xFF7C4DFF);
-
-    final content = CustomPaint(
-      foregroundPainter: _InnerHighlightPainter(
-        radius: borderRadius,
-        highlightColor: Colors.white.withOpacity(0.25),
-      ),
-      child: Container(
-        width: width,
-        height: height,
-        padding: padding,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(borderRadius),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              dominantColor.withOpacity(0.18),
-              Colors.white.withOpacity(0.08),
-            ],
-          ),
-          border: Border.all(
-            width: 1.0,
-            color: Colors.transparent, // Replaced below by gradient border
-          ),
+    Widget result = Container(
+      width: width,
+      height: height,
+      margin: margin,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: dominantColor.withValues(alpha: 0.60),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1.0,
         ),
-        child: child,
       ),
+      child: child,
     );
-
-    // Border painter for top-left to bottom-right white gradient
-    final borderedContent = CustomPaint(
-      painter: _GradientBorderPainter(
-        radius: borderRadius,
-        strokeWidth: 1.0,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.35),
-            Colors.white.withOpacity(0.05),
-          ],
-        ),
-      ),
-      child: content,
-    );
-
-    Widget result;
-    if (isReduced) {
-      result = Container(
-        margin: margin,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(borderRadius),
-          color: const Color(0xFF16121E).withOpacity(0.85),
-          boxShadow: showShadow
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(borderRadius),
-          child: borderedContent,
-        ),
-      );
-    } else {
-      result = Container(
-        margin: margin,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(borderRadius),
-          boxShadow: showShadow
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-        child: RepaintBoundary(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-              child: borderedContent,
-            ),
-          ),
-        ),
-      );
-    }
 
     if (onTap != null) {
-      return GestureDetector(
+      result = GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: result,
       );
     }
+
     return result;
   }
-}
-
-class _GradientBorderPainter extends CustomPainter {
-  final double radius;
-  final double strokeWidth;
-  final Gradient gradient;
-
-  _GradientBorderPainter({
-    required this.radius,
-    required this.strokeWidth,
-    required this.gradient,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..shader = gradient.createShader(rect);
-
-    canvas.drawRRect(rrect, paint);
-  }
-
-  @override
-  bool shouldRepaint(_GradientBorderPainter oldDelegate) =>
-      oldDelegate.radius != radius || oldDelegate.strokeWidth != strokeWidth;
-}
-
-class _InnerHighlightPainter extends CustomPainter {
-  final double radius;
-  final Color highlightColor;
-
-  _InnerHighlightPainter({
-    required this.radius,
-    required this.highlightColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-    final path = Path();
-    final r = radius.clamp(0.0, size.height / 2);
-    path.moveTo(r, 0.5);
-    path.lineTo(size.width - r, 0.5);
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = highlightColor;
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_InnerHighlightPainter oldDelegate) =>
-      oldDelegate.radius != radius || oldDelegate.highlightColor != highlightColor;
 }

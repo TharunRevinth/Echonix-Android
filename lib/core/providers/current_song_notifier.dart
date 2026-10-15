@@ -986,33 +986,35 @@ class CurrentSongNotifier extends _$CurrentSongNotifier {
 // Sleep Timer (Bedtime Mode) Notifier & Provider
 // -----------------------------------------------------------------------------
 
-class SleepTimerNotifier extends StateNotifier<int> {
+class SleepTimerNotifier extends StateNotifier<DateTime?> {
   final Ref _ref;
   Timer? _timer;
 
-  SleepTimerNotifier(this._ref) : super(0);
+  SleepTimerNotifier(this._ref) : super(null);
 
   void setTimer(int minutes) {
     _timer?.cancel();
     if (minutes <= 0) {
-      state = 0;
+      state = null;
       return;
     }
-    state = minutes * 60;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (state <= 1) {
-        state = 0;
-        _timer?.cancel();
-        _ref.read(currentSongNotifierProvider.notifier).audioPlayer?.pause();
-      } else {
-        state = state - 1;
-      }
+    final endsAt = DateTime.now().add(Duration(minutes: minutes));
+    state = endsAt;
+    _timer = Timer(Duration(minutes: minutes), () {
+      state = null;
+      _ref.read(currentSongNotifierProvider.notifier).audioPlayer?.pause();
     });
   }
 
   void stopTimer() {
     _timer?.cancel();
-    state = 0;
+    state = null;
+  }
+
+  int get remainingSeconds {
+    if (state == null) return 0;
+    final diff = state!.difference(DateTime.now()).inSeconds;
+    return diff > 0 ? diff : 0;
   }
 
   @override
@@ -1022,7 +1024,7 @@ class SleepTimerNotifier extends StateNotifier<int> {
   }
 }
 
-final sleepTimerProvider = StateNotifierProvider<SleepTimerNotifier, int>((ref) {
+final sleepTimerProvider = StateNotifierProvider<SleepTimerNotifier, DateTime?>((ref) {
   return SleepTimerNotifier(ref);
 });
 

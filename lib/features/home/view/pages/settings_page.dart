@@ -151,7 +151,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final eqSettings = ref.watch(equalizerProvider);
-    final remainingSleep = ref.watch(sleepTimerProvider);
+    final sleepEndsAt = ref.watch(sleepTimerProvider);
+    final remainingSleep = sleepEndsAt != null
+        ? sleepEndsAt.difference(DateTime.now()).inSeconds.clamp(0, 86400)
+        : 0;
     final syncState = ref.watch(syncServiceProvider);
 
     // List of active dropdown options combining built-in and user custom presets
@@ -835,6 +838,92 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 Expanded(
                                   child: GestureDetector(
                                     onTap: () {
+                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.off);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
+                                            ? Colors.white.withOpacity(0.18)
+                                            : Colors.white.withOpacity(0.04),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
+                                              ? Colors.purpleAccent
+                                              : Colors.white.withOpacity(0.06),
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.blur_off_rounded,
+                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
+                                                ? Colors.purpleAccent
+                                                : Colors.grey,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Off',
+                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Max Speed',
+                                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.balanced);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
+                                            ? Colors.white.withOpacity(0.18)
+                                            : Colors.white.withOpacity(0.04),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
+                                              ? Colors.purpleAccent
+                                              : Colors.white.withOpacity(0.06),
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.auto_awesome_rounded,
+                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
+                                                ? Colors.purpleAccent
+                                                : Colors.grey,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Balanced',
+                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Dock Glass',
+                                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
                                       ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.full);
                                     },
                                     child: Container(
@@ -861,55 +950,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           const Text(
-                                            'Full Glass',
+                                            'Full',
                                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                                           ),
                                           const SizedBox(height: 2),
                                           const Text(
-                                            'Blurs & Springs',
-                                            style: TextStyle(color: Colors.grey, fontSize: 10),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.reduced);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
-                                            ? Colors.white.withOpacity(0.18)
-                                            : Colors.white.withOpacity(0.04),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
-                                              ? Colors.purpleAccent
-                                              : Colors.white.withOpacity(0.06),
-                                        ),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            Icons.blur_off_rounded,
-                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.reduced
-                                                ? Colors.purpleAccent
-                                                : Colors.grey,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Reduced',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          const Text(
-                                            'Battery Saver',
+                                            'Heavy Blur',
                                             style: TextStyle(color: Colors.grey, fontSize: 10),
                                           ),
                                         ],

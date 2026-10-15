@@ -34,15 +34,20 @@ class MusicSlab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentSong = ref.watch(currentSongNotifierProvider);
+    final hasSong = ref.watch(currentSongNotifierProvider.select((s) => s != null));
     final songNotifier = ref.read(currentSongNotifierProvider.notifier);
 
-    if (currentSong == null) {
+    if (!hasSong) {
       return const SizedBox();
     }
 
-    final dominantColorAsync = ref.watch(dominantColorProvider(currentSong.thumbnail_url));
-    final baseColor = dominantColorAsync.valueOrNull ?? hexToColor(currentSong.hex_code);
+    final songName = ref.watch(currentSongNotifierProvider.select((s) => s?.song_name ?? ''));
+    final artist = ref.watch(currentSongNotifierProvider.select((s) => s?.artist ?? ''));
+    final thumb = ref.watch(currentSongNotifierProvider.select((s) => s?.thumbnail_url ?? ''));
+    final hexCode = ref.watch(currentSongNotifierProvider.select((s) => s?.hex_code ?? 'B388FF'));
+
+    final dominantColorAsync = ref.watch(dominantColorProvider(thumb));
+    final baseColor = dominantColorAsync.valueOrNull ?? hexToColor(hexCode);
 
     return GestureDetector(
       onTap: onOpenPlayer ?? () => _defaultOpenPlayer(context),
@@ -80,7 +85,7 @@ class MusicSlab extends ConsumerWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: CachedNetworkImage(
-                          imageUrl: currentSong.thumbnail_url,
+                          imageUrl: thumb,
                           width: 48,
                           height: 48,
                           memCacheWidth: 96,
@@ -101,7 +106,7 @@ class MusicSlab extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            currentSong.song_name,
+                            songName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -112,7 +117,7 @@ class MusicSlab extends ConsumerWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            currentSong.artist,
+                            artist,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
