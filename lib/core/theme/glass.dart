@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'echonix_theme.dart';
 
 enum VisualEffectsMode {
   off,
@@ -97,9 +98,15 @@ class GlassDock extends ConsumerWidget {
     final mode = ref.watch(visualEffectsModeProvider);
     final disableAnimations = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final isOff = mode == VisualEffectsMode.off || disableAnimations;
-    final double sigma = isOff ? 0.0 : (mode == VisualEffectsMode.full ? 22.0 : 14.0);
+    final glass = Theme.of(context).extension<EchoGlass>();
+    final defaultSigma = glass?.dockBlur ?? 14.0;
+    final double sigma = isOff ? 0.0 : (mode == VisualEffectsMode.full ? defaultSigma * 1.5 : defaultSigma);
 
-    final bgTint = (tintColor ?? const Color(0xFF140D20)).withValues(alpha: isOff ? 0.95 : 0.72);
+    final bgTint = tintColor ??
+        (isOff
+            ? (glass?.fillOff ?? Theme.of(context).colorScheme.surfaceContainerHigh)
+            : (glass?.fill ?? Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.62)));
+    final borderColor = glass?.strokeStart ?? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.28);
 
     Widget content = Container(
       padding: padding,
@@ -107,7 +114,7 @@ class GlassDock extends ConsumerWidget {
         color: bgTint,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
+          color: borderColor,
           width: 1.0,
         ),
       ),
@@ -168,7 +175,10 @@ class GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dominantColor = tintColor ?? const Color(0xFF1A1326);
+    final glass = Theme.of(context).extension<EchoGlass>();
+    final dominantColor = tintColor ??
+        (glass?.fill ?? Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.62));
+    final borderColor = glass?.strokeEnd ?? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.04);
 
     Widget result = Container(
       width: width,
@@ -176,10 +186,10 @@ class GlassSurface extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: dominantColor.withValues(alpha: 0.60),
+        color: dominantColor,
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: borderColor,
           width: 1.0,
         ),
       ),
@@ -197,3 +207,4 @@ class GlassSurface extends StatelessWidget {
     return result;
   }
 }
+

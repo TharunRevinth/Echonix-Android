@@ -52,7 +52,9 @@ class MyApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Echonix',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkThemeMode,
+      theme: EchonixTheme.darkTheme,
+      darkTheme: EchonixTheme.darkTheme,
+      themeMode: ThemeMode.dark,
       home: const HomePage(),
     );
   }
