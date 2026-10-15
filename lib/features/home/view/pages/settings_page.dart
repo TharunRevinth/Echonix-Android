@@ -1,4 +1,4 @@
-import 'package:client/core/theme/app_pallete.dart';
+import 'package:client/core/theme/echonix_theme.dart';
 import 'package:client/core/theme/glass.dart';
 import 'package:client/core/python_backend.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
@@ -105,35 +105,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (ctx) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text('Save Custom EQ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: const Text('Save Custom EQ'),
           content: TextField(
             controller: controller,
-            style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               hintText: 'Enter preset name...',
-              hintStyle: TextStyle(color: Colors.grey),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            FilledButton(
               onPressed: () {
                 final name = controller.text.trim();
                 if (name.isNotEmpty) {
                   ref.read(equalizerProvider.notifier).saveCustomPreset(name);
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Saved custom preset "$name"')),
                   );
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
               child: const Text('Save'),
             ),
           ],
@@ -148,16 +144,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.dispose();
   }
 
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 20),
+      child: Text(
+        title.toUpperCase(),
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final dockHeight = ref.watch(dockHeightProvider);
+
     final eqSettings = ref.watch(equalizerProvider);
     final sleepEndsAt = ref.watch(sleepTimerProvider);
     final remainingSleep = sleepEndsAt != null
         ? sleepEndsAt.difference(DateTime.now()).inSeconds.clamp(0, 86400)
         : 0;
     final syncState = ref.watch(syncServiceProvider);
+    final effectsMode = ref.watch(visualEffectsModeProvider);
 
-    // List of active dropdown options combining built-in and user custom presets
     final List<String> dropdownItems = [
       'Normal',
       'Bass Boost',
@@ -169,7 +185,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ...eqSettings.customPresets.keys,
     ];
 
-    // Determine current gain values to pass to visualizer curve painter
     final int bandsCount = eqSettings.frequencies.length;
     List<double> rawGains = [];
     if (eqSettings.preset == 'Custom') {
@@ -208,920 +223,665 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
-            ],
-            stops: [0.0, 0.4, 1.0],
-          ),
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        title: Text(
+          'Settings',
+          style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
-        child: SafeArea(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Settings',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // 1. Account and sync
-                      GlassSurface(
-                        borderRadius: 16,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.sync_rounded, color: Colors.blueAccent, size: 24),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Account and sync',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (syncState.isSyncing)
-                                  const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blueAccent),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            if (syncState.reconnectNeeded) ...[
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 24),
-                                    SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        'Reconnect needed: Your YouTube Music session has expired or requires re-authentication.',
-                                        style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Account and sync
+                  _buildSectionHeader(context, 'Account & Sync'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (syncState.reconnectNeeded) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: colorScheme.errorContainer.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: colorScheme.error),
                               ),
-                            ],
-
-                            if (_isAuthenticated) ...[
-                              const Row(
+                              child: Row(
                                 children: [
-                                  Icon(Icons.check_circle, color: Colors.green, size: 24),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Connected to YouTube Music',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                  Icon(Icons.warning_amber_rounded, color: colorScheme.error, size: 24),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Reconnect needed: Your YouTube Music session has expired or requires re-authentication.',
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onErrorContainer,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Your personalized home feed, history, likes, and library playlists are now synced.',
-                                style: TextStyle(color: Colors.grey, fontSize: 13),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _logout,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.redAccent,
-                                  minimumSize: const Size(double.infinity, 42),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: const Text('Logout / Disconnect Account', style: TextStyle(color: Colors.white)),
-                              ),
-                            ] else ...[
-                              const Text(
-                                'Connect YouTube Music Account',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Paste your YouTube Music cookie or cURL command below to fetch your personalized music library.',
-                                style: TextStyle(color: Colors.grey, fontSize: 13),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _cookieController,
-                                maxLines: 4,
-                                style: const TextStyle(color: Colors.white),
-                                decoration: InputDecoration(
-                                  hintText: 'Paste cookie string or cURL command here...',
-                                  filled: true,
-                                  fillColor: Colors.white.withOpacity(0.05),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _isConnecting ? null : _saveCredentials,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Pallete.whiteColor,
-                                  foregroundColor: Colors.black,
-                                  minimumSize: const Size(double.infinity, 44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                child: _isConnecting
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
-                                      )
-                                    : const Text('Connect Account', style: TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              if (_message.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  _message,
-                                  style: TextStyle(
-                                    color: _message.contains('success') || _message.contains('Connected')
-                                        ? Colors.green
-                                        : Colors.redAccent,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ],
-
-                            const Divider(color: Colors.white10, height: 28),
-
-                            // Sync controls
-                            Text(
-                              'Last sync: ${syncState.lastSyncTime != null ? _formatDateTime(syncState.lastSyncTime!) : 'Never'}',
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Pending changes: ${syncState.pendingCount}',
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            if (syncState.failedCount > 0) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'Failed operations: ${syncState.failedCount}',
-                                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: syncState.isSyncing
-                                        ? null
-                                        : () {
-                                            ref.read(syncServiceProvider.notifier).flush();
-                                            ref.read(syncServiceProvider.notifier).pullIncremental(force: true);
-                                          },
-                                    icon: const Icon(Icons.sync, size: 18),
-                                    label: const Text('Sync Now'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: BorderSide(color: Colors.white.withOpacity(0.3)),
-                                    ),
-                                  ),
-                                ),
-                                if (syncState.failedCount > 0) ...[
-                                  const SizedBox(width: 8),
-                                  OutlinedButton(
-                                    onPressed: () => ref.read(syncServiceProvider.notifier).retryFailed(),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.amber,
-                                      side: const BorderSide(color: Colors.amber),
-                                    ),
-                                    child: const Text('Retry'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  OutlinedButton(
-                                    onPressed: () => ref.read(syncServiceProvider.notifier).discardFailed(),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.redAccent,
-                                      side: const BorderSide(color: Colors.redAccent),
-                                    ),
-                                    child: const Text('Discard'),
-                                  ),
-                                ],
-                              ],
                             ),
                           ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // 2. Playback
-                      GlassSurface(
-                        borderRadius: 16,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.play_circle_outline_rounded, color: Colors.blueAccent, size: 24),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Playback',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Autoplay toggle
+                          if (_isAuthenticated) ...[
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Expanded(
+                                Icon(Icons.check_circle_rounded, color: colorScheme.primary, size: 24),
+                                const SizedBox(width: 10),
+                                Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Queue Autoplay Prediction',
-                                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                                        'Connected to YouTube Music',
+                                        style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                                       ),
-                                      SizedBox(height: 2),
+                                      const SizedBox(height: 2),
                                       Text(
-                                        'Continues playback with predicted similar tracks',
-                                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                                        'Personalized library and history are synchronized.',
+                                        style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                                       ),
                                     ],
                                   ),
                                 ),
-                                Switch(
-                                  value: ref.watch(autoplayEnabledProvider),
-                                  activeColor: Colors.purpleAccent,
-                                  onChanged: (val) {
-                                    ref.read(autoplayEnabledProvider.notifier).toggle();
-                                  },
-                                ),
                               ],
                             ),
-                            const Divider(color: Colors.white10, height: 24),
-                            // Bedtime Mode (Sleep Timer)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.bedtime_outlined, color: Colors.blueAccent, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Bedtime Mode (Sleep Timer)',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (remainingSleep > 0)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blueAccent.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      _formatRemainingTime(remainingSleep),
-                                      style: const TextStyle(
-                                        color: Colors.blueAccent,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Set a timer to automatically pause music playback when you fall asleep.',
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _buildSleepChip(0, 'Off', remainingSleep),
-                                _buildSleepChip(5, '5 min', remainingSleep),
-                                _buildSleepChip(10, '10 min', remainingSleep),
-                                _buildSleepChip(15, '15 min', remainingSleep),
-                                _buildSleepChip(30, '30 min', remainingSleep),
-                                _buildSleepChip(45, '45 min', remainingSleep),
-                                _buildSleepChip(60, '1 hour', remainingSleep),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // 3. Audio/EQ
-                      GlassSurface(
-                        borderRadius: 16,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(Icons.equalizer_rounded, color: Colors.purpleAccent, size: 24),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Audio & Equalizer',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Switch(
-                                  value: eqSettings.enabled,
-                                  onChanged: (val) {
-                                    ref.read(equalizerProvider.notifier).toggle(val);
-                                  },
-                                  activeColor: Colors.purpleAccent,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Customize the frequencies and choose presets for your perfect listening experience.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            if (eqSettings.enabled) ...[
-                              const SizedBox(height: 16),
-
-                              // Interactive Bezier Curve EQ widget
-                              const Text(
-                                'Interactive Curve Control (Drag to adjust)',
-                                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                            const SizedBox(height: 14),
+                            FilledButton.tonal(
+                              onPressed: _logout,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 40),
                               ),
-                              const SizedBox(height: 10),
-                              EqCurveWidget(
-                                gains: currentGains,
-                                frequencies: eqSettings.frequencies,
-                                onBandChanged: (bandIdx, gain) {
-                                  ref.read(equalizerProvider.notifier).setBand(bandIdx, gain);
-                                },
-                              ),
-                              const SizedBox(height: 16),
-
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Preset Mode',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                  ),
-                                  Row(
-                                    children: [
-                                      DropdownButton<String>(
-                                        value: dropdownItems.contains(eqSettings.preset) ? eqSettings.preset : 'Normal',
-                                        dropdownColor: const Color(0xFF1E1E1E),
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                        underline: const SizedBox(),
-                                        items: dropdownItems.map((String val) {
-                                          return DropdownMenuItem<String>(
-                                            value: val,
-                                            child: Text(val),
-                                          );
-                                        }).toList(),
-                                        onChanged: (val) {
-                                          if (val != null) {
-                                            ref.read(equalizerProvider.notifier).setPreset(val);
-                                          }
-                                        },
-                                      ),
-                                      if (eqSettings.customPresets.containsKey(eqSettings.preset))
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                          onPressed: () {
-                                            ref.read(equalizerProvider.notifier).deleteCustomPreset(eqSettings.preset);
-                                          },
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              
-                              // Save custom Preset CTA
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  TextButton.icon(
-                                    onPressed: () => _showSavePresetDialog(context),
-                                    icon: const Icon(Icons.save_outlined, color: Colors.purpleAccent, size: 18),
-                                    label: const Text('Save Custom Preset', style: TextStyle(color: Colors.purpleAccent, fontSize: 13)),
-                                  ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Bands Adjustment',
-                                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              const SizedBox(height: 8),
-                              
-                              // Build dynamic list of sliders based on frequency count
-                              ...List.generate(bandsCount, (index) {
-                                final double freq = eqSettings.frequencies[index];
-                                final String label = formatFreq(freq);
-                                double val = currentGains[index];
-
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 60,
-                                        child: Text(
-                                          label,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Slider(
-                                          value: val.clamp(-10.0, 10.0),
-                                          min: -10.0,
-                                          max: 10.0,
-                                          activeColor: Colors.purpleAccent,
-                                          inactiveColor: Colors.white12,
-                                          onChanged: (newVal) {
-                                            ref.read(equalizerProvider.notifier).setBand(index, newVal);
-                                          },
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: 50,
-                                        child: Text(
-                                          '${val >= 0 ? '+' : ''}${val.toStringAsFixed(1)} dB',
-                                          textAlign: TextAlign.end,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 11),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }),
-                            ],
-
-                            const Divider(color: Colors.white10, height: 28),
-
-                            // Spatial Stereo & Bass Boost Section
-                            const Row(
-                              children: [
-                                Icon(Icons.spatial_audio_off_outlined, color: Colors.tealAccent, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Spatial Stereo & Bass Boost',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
+                              child: const Text('Disconnect Account'),
                             ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Hardware-accelerated bass boost and native spatial virtualizer.',
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Bass Boost Slider
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Hardware Bass Boost', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                Text(
-                                  '${(eqSettings.bassBoostStrength / 10).toStringAsFixed(0)}%',
-                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            Slider(
-                              value: eqSettings.bassBoostStrength.toDouble(),
-                              min: 0,
-                              max: 1000,
-                              activeColor: Colors.tealAccent,
-                              inactiveColor: Colors.white12,
-                              onChanged: (val) {
-                                ref.read(equalizerProvider.notifier).setBassBoostStrength(val.toInt());
-                              },
-                            ),
-
-                            // Spatial Stereo Slider
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Stereo Widening (3D Spatial)', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                Text(
-                                  '${(eqSettings.virtualizerStrength / 10).toStringAsFixed(0)}%',
-                                  style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            Slider(
-                              value: eqSettings.virtualizerStrength.toDouble(),
-                              min: 0,
-                              max: 1000,
-                              activeColor: Colors.tealAccent,
-                              inactiveColor: Colors.white12,
-                              onChanged: (val) {
-                                ref.read(equalizerProvider.notifier).setVirtualizerStrength(val.toInt());
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // 4. Appearance
-                      GlassSurface(
-                        borderRadius: 16,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.palette_outlined, color: Colors.purpleAccent, size: 24),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Appearance',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Customize blur shaders, backdrop filters, and visual responsiveness.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.off);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
-                                            ? Colors.white.withOpacity(0.18)
-                                            : Colors.white.withOpacity(0.04),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
-                                              ? Colors.purpleAccent
-                                              : Colors.white.withOpacity(0.06),
-                                        ),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            Icons.blur_off_rounded,
-                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.off
-                                                ? Colors.purpleAccent
-                                                : Colors.grey,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Off',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          const Text(
-                                            'Max Speed',
-                                            style: TextStyle(color: Colors.grey, fontSize: 10),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.balanced);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
-                                            ? Colors.white.withOpacity(0.18)
-                                            : Colors.white.withOpacity(0.04),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
-                                              ? Colors.purpleAccent
-                                              : Colors.white.withOpacity(0.06),
-                                        ),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            Icons.auto_awesome_rounded,
-                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.balanced
-                                                ? Colors.purpleAccent
-                                                : Colors.grey,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Balanced',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          const Text(
-                                            'Dock Glass',
-                                            style: TextStyle(color: Colors.grey, fontSize: 10),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      ref.read(visualEffectsModeProvider.notifier).setMode(VisualEffectsMode.full);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
-                                            ? Colors.white.withOpacity(0.18)
-                                            : Colors.white.withOpacity(0.04),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
-                                              ? Colors.purpleAccent
-                                              : Colors.white.withOpacity(0.06),
-                                        ),
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            Icons.blur_on_rounded,
-                                            color: ref.watch(visualEffectsModeProvider) == VisualEffectsMode.full
-                                                ? Colors.purpleAccent
-                                                : Colors.grey,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Full',
-                                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          const Text(
-                                            'Heavy Blur',
-                                            style: TextStyle(color: Colors.grey, fontSize: 10),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // 5. Storage and downloads
-                      GlassSurface(
-                        borderRadius: 16,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.storage_rounded, color: Colors.amberAccent, size: 24),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Storage and downloads',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Manage offline audio files, cached album covers, and temporary listening signals.',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () {
-                                      ref.read(homeTabIndexProvider.notifier).state = 2; // Jump to Library
-                                    },
-                                    icon: const Icon(Icons.download_done_rounded, size: 18),
-                                    label: const Text('Manage Downloads'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () {
-                                      PaintingBinding.instance.imageCache.clear();
-                                      PaintingBinding.instance.imageCache.clearLiveImages();
-                                      ref.read(homeLocalRepositoryProvider).clearSearchHistory();
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Memory and search caches cleared successfully.')),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                                    label: const Text('Clear Caches'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.amberAccent,
-                                      side: const BorderSide(color: Colors.amberAccent),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Developer Section
-                      GlassSurface(
-                        borderRadius: 20,
-                        blurSigma: 18,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.developer_mode_rounded, color: Colors.cyanAccent, size: 24),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Developer',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.network_check_rounded, color: Colors.cyanAccent),
-                              title: const Text('Test stream', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                              subtitle: const Text('Diagnose stream resolution across client chain', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                              trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 16),
-                              onTap: () => showStreamDiagnosticsDialog(context, ref),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 48),
-                      // Professional Footer Credits
-                      Center(
-                        child: Column(
-                          children: [
+                          ] else ...[
                             Text(
-                              'ECHONIX',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white.withOpacity(0.9),
-                                letterSpacing: 3.0,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Version 1.0.0 (Debug Build)',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white.withOpacity(0.4),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Developed & Created by Tharun Revinth',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.purpleAccent.withOpacity(0.8),
-                                letterSpacing: 0.5,
-                              ),
+                              'Connect YouTube Music Account',
+                              style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '© 2026 Echonix Music. All Rights Reserved.',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withOpacity(0.25),
+                              'Paste your cookie or cURL command below to access your account.',
+                              style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _cookieController,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                hintText: 'Paste cookie string or cURL command here...',
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            FilledButton(
+                              onPressed: _isConnecting ? null : _saveCredentials,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 44),
+                              ),
+                              child: _isConnecting
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Text('Connect Account'),
+                            ),
+                            if (_message.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                _message,
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: _message.contains('success') || _message.contains('Connected')
+                                      ? colorScheme.primary
+                                      : colorScheme.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
-                        ),
+                          const Divider(height: 28),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Last sync',
+                                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                              ),
+                              Text(
+                                syncState.lastSyncTime != null ? _formatDateTime(syncState.lastSyncTime!) : 'Never',
+                                style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Pending changes',
+                                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                              ),
+                              Text(
+                                '${syncState.pendingCount}',
+                                style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          if (syncState.failedCount > 0) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Failed operations',
+                                  style: textTheme.bodySmall?.copyWith(color: colorScheme.error),
+                                ),
+                                Text(
+                                  '${syncState.failedCount}',
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.error,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.tonalIcon(
+                                  onPressed: syncState.isSyncing
+                                      ? null
+                                      : () {
+                                          ref.read(syncServiceProvider.notifier).flush();
+                                          ref.read(syncServiceProvider.notifier).pullIncremental(force: true);
+                                        },
+                                  icon: syncState.isSyncing
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.sync_rounded, size: 18),
+                                  label: const Text('Sync Now'),
+                                ),
+                              ),
+                              if (syncState.failedCount > 0) ...[
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () => ref.read(syncServiceProvider.notifier).retryFailed(),
+                                  child: const Text('Retry'),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  onPressed: () => ref.read(syncServiceProvider.notifier).discardFailed(),
+                                  child: const Text('Discard'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 160), // Space to scroll past floating music slab and glass tab bar
-                    ],
+                    ),
                   ),
-                ),
-        ),
-      ),
+
+                  // 2. Playback
+                  _buildSectionHeader(context, 'Playback'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          title: const Text('Queue Autoplay Prediction'),
+                          subtitle: const Text('Continues playback with predicted similar tracks'),
+                          value: ref.watch(autoplayEnabledProvider),
+                          onChanged: (_) {
+                            ref.read(autoplayEnabledProvider.notifier).toggle();
+                          },
+                        ),
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.bedtime_outlined, color: colorScheme.primary, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Bedtime Mode (Sleep Timer)',
+                                        style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                  if (remainingSleep > 0)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        _formatRemainingTime(remainingSleep),
+                                        style: textTheme.labelSmall?.copyWith(
+                                          color: colorScheme.onPrimaryContainer,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Automatically pauses playback when the timer finishes.',
+                                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _buildSleepChip(0, 'Off', remainingSleep),
+                                  _buildSleepChip(5, '5 min', remainingSleep),
+                                  _buildSleepChip(10, '10 min', remainingSleep),
+                                  _buildSleepChip(15, '15 min', remainingSleep),
+                                  _buildSleepChip(30, '30 min', remainingSleep),
+                                  _buildSleepChip(45, '45 min', remainingSleep),
+                                  _buildSleepChip(60, '1 hour', remainingSleep),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 3. Audio & Equalizer
+                  _buildSectionHeader(context, 'Audio & Equalizer'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Hardware Equalizer'),
+                            subtitle: const Text('Custom frequency bands and audio enhancements'),
+                            value: eqSettings.enabled,
+                            onChanged: (val) {
+                              ref.read(equalizerProvider.notifier).toggle(val);
+                            },
+                          ),
+                          if (eqSettings.enabled) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'Interactive Curve Control (Drag to adjust)',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            EqCurveWidget(
+                              colorScheme: colorScheme,
+                              gains: currentGains,
+                              frequencies: eqSettings.frequencies,
+                              onBandChanged: (bandIdx, gain) {
+                                ref.read(equalizerProvider.notifier).setBand(bandIdx, gain);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Preset Mode',
+                                  style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                Row(
+                                  children: [
+                                    DropdownButton<String>(
+                                      value: dropdownItems.contains(eqSettings.preset) ? eqSettings.preset : 'Normal',
+                                      dropdownColor: colorScheme.surfaceContainerHigh,
+                                      style: textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurface,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      underline: const SizedBox(),
+                                      items: dropdownItems.map((String val) {
+                                        return DropdownMenuItem<String>(
+                                          value: val,
+                                          child: Text(val),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          ref.read(equalizerProvider.notifier).setPreset(val);
+                                        }
+                                      },
+                                    ),
+                                    if (eqSettings.customPresets.containsKey(eqSettings.preset))
+                                      IconButton(
+                                        icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error, size: 20),
+                                        onPressed: () {
+                                          ref.read(equalizerProvider.notifier).deleteCustomPreset(eqSettings.preset);
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => _showSavePresetDialog(context),
+                                icon: Icon(Icons.save_outlined, size: 18, color: colorScheme.primary),
+                                label: Text('Save Custom Preset', style: TextStyle(color: colorScheme.primary)),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Bands Adjustment',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...List.generate(bandsCount, (index) {
+                              final double freq = eqSettings.frequencies[index];
+                              final String label = formatFreq(freq);
+                              final double val = currentGains[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 60,
+                                      child: Text(
+                                        label,
+                                        style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Slider(
+                                        value: val.clamp(-10.0, 10.0),
+                                        min: -10.0,
+                                        max: 10.0,
+                                        onChanged: (newVal) {
+                                          ref.read(equalizerProvider.notifier).setBand(index, newVal);
+                                        },
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 54,
+                                      child: Text(
+                                        '${val >= 0 ? '+' : ''}${val.toStringAsFixed(1)} dB',
+                                        textAlign: TextAlign.end,
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                          const Divider(height: 28),
+                          Text(
+                            'Spatial Stereo & Bass Boost',
+                            style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Hardware bass boost and 3D virtualizer effect.',
+                            style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Hardware Bass Boost', style: textTheme.bodyMedium),
+                              Text(
+                                '${(eqSettings.bassBoostStrength / 10).toStringAsFixed(0)}%',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: eqSettings.bassBoostStrength.toDouble(),
+                            min: 0,
+                            max: 1000,
+                            onChanged: (val) {
+                              ref.read(equalizerProvider.notifier).setBassBoostStrength(val.toInt());
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Stereo Widening (3D Spatial)', style: textTheme.bodyMedium),
+                              Text(
+                                '${(eqSettings.virtualizerStrength / 10).toStringAsFixed(0)}%',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: eqSettings.virtualizerStrength.toDouble(),
+                            min: 0,
+                            max: 1000,
+                            onChanged: (val) {
+                              ref.read(equalizerProvider.notifier).setVirtualizerStrength(val.toInt());
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 4. Appearance
+                  _buildSectionHeader(context, 'Appearance'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Visual Effects',
+                            style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Controls blur shaders and backdrop filtering for GPU performance.',
+                            style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: SegmentedButton<VisualEffectsMode>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: VisualEffectsMode.off,
+                                  label: Text('Off'),
+                                  icon: Icon(Icons.blur_off_rounded),
+                                ),
+                                ButtonSegment(
+                                  value: VisualEffectsMode.balanced,
+                                  label: Text('Balanced'),
+                                  icon: Icon(Icons.auto_awesome_rounded),
+                                ),
+                                ButtonSegment(
+                                  value: VisualEffectsMode.full,
+                                  label: Text('Full'),
+                                  icon: Icon(Icons.blur_on_rounded),
+                                ),
+                              ],
+                              selected: {effectsMode},
+                              onSelectionChanged: (newSelection) {
+                                ref.read(visualEffectsModeProvider.notifier).setMode(newSelection.first);
+                              },
+                            ),
+                          ),
+                          const Divider(height: 28),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Match artwork colours'),
+                            subtitle: const Text('Tint player interface with the active album cover palette'),
+                            value: ref.watch(matchArtworkColorsProvider),
+                            onChanged: (val) {
+                              ref.read(matchArtworkColorsProvider.notifier).state = val;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 5. Storage and downloads
+                  _buildSectionHeader(context, 'Storage & Downloads'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Manage Storage',
+                            style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Manage offline audio files, cached album covers, and temporary signals.',
+                            style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    ref.read(homeTabIndexProvider.notifier).state = 2; // Jump to Library
+                                  },
+                                  icon: const Icon(Icons.download_done_rounded, size: 18),
+                                  label: const Text('Downloads'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    PaintingBinding.instance.imageCache.clear();
+                                    PaintingBinding.instance.imageCache.clearLiveImages();
+                                    ref.read(homeLocalRepositoryProvider).clearSearchHistory();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Memory and search caches cleared successfully.')),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                                  label: const Text('Clear Caches'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 6. Developer
+                  _buildSectionHeader(context, 'Developer'),
+                  Card.filled(
+                    color: colorScheme.surfaceContainer,
+                    child: ListTile(
+                      leading: Icon(Icons.network_check_rounded, color: colorScheme.primary),
+                      title: const Text('Test stream', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        'Diagnose stream resolution across client chain',
+                        style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onTap: () => showStreamDiagnosticsDialog(context, ref),
+                    ),
+                  ),
+
+                  const SizedBox(height: 36),
+
+                  // Footer
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          'ECHONIX',
+                          style: textTheme.labelLarge?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 3.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Version 1.0.0 (Release Build)',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.outline,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Developed & Created by Tharun Revinth',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '© 2026 Echonix Music. All Rights Reserved.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.outline,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: dockHeight + 16),
+                ],
+              ),
+            ),
     );
   }
 
@@ -1129,38 +889,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final bool isActive = (minutes == 0 && currentRemainingSeconds == 0) ||
         (minutes > 0 && currentRemainingSeconds > 0 && (currentRemainingSeconds - (minutes * 60)).abs() < 10);
 
-    return GestureDetector(
-      onTap: () {
+    return FilterChip(
+      selected: isActive,
+      label: Text(label),
+      onSelected: (_) {
         if (minutes == 0) {
           ref.read(sleepTimerProvider.notifier).stopTimer();
         } else {
           ref.read(sleepTimerProvider.notifier).setTimer(minutes);
         }
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.blueAccent : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive ? Colors.blueAccent : Colors.white.withOpacity(0.1),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.black : Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
     );
   }
 }
 
-// Helper to format frequency
 String formatFreq(double val) {
   double hz = val;
   if (hz > 25000) {
@@ -1173,16 +915,15 @@ String formatFreq(double val) {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Interactive Spotify-style EQ curve widgets & custom painters
-// -----------------------------------------------------------------------------
 class EqCurveWidget extends ConsumerWidget {
+  final ColorScheme colorScheme;
   final List<double> gains;
   final List<double> frequencies;
   final Function(int bandIdx, double gain) onBandChanged;
 
   const EqCurveWidget({
     super.key,
+    required this.colorScheme,
     required this.gains,
     required this.frequencies,
     required this.onBandChanged,
@@ -1194,7 +935,7 @@ class EqCurveWidget extends ConsumerWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         const height = 150.0;
-        final centerY = height / 2;
+        const centerY = height / 2;
         final int bandsCount = gains.length;
         final List<double> xPoints = List.generate(bandsCount, (i) => width * (i + 0.5) / bandsCount);
 
@@ -1210,7 +951,7 @@ class EqCurveWidget extends ConsumerWidget {
           }
 
           final double deltaY = centerY - localPos.dy;
-          final double maxDeltaY = centerY - 10.0;
+          const double maxDeltaY = centerY - 10.0;
           double gain = (deltaY / maxDeltaY) * 10.0;
           gain = gain.clamp(-10.0, 10.0);
 
@@ -1224,14 +965,18 @@ class EqCurveWidget extends ConsumerWidget {
             width: double.infinity,
             height: height,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colorScheme.outlineVariant),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               child: CustomPaint(
-                painter: EqCurvePainter(gains: gains, frequencies: frequencies),
+                painter: EqCurvePainter(
+                  colorScheme: colorScheme,
+                  gains: gains,
+                  frequencies: frequencies,
+                ),
               ),
             ),
           ),
@@ -1242,10 +987,15 @@ class EqCurveWidget extends ConsumerWidget {
 }
 
 class EqCurvePainter extends CustomPainter {
+  final ColorScheme colorScheme;
   final List<double> gains;
   final List<double> frequencies;
 
-  EqCurvePainter({required this.gains, required this.frequencies});
+  EqCurvePainter({
+    required this.colorScheme,
+    required this.gains,
+    required this.frequencies,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1255,15 +1005,14 @@ class EqCurvePainter extends CustomPainter {
     final int bandsCount = gains.length;
 
     final gridPaint = Paint()
-      ..color = Colors.white.withOpacity(0.08)
+      ..color = colorScheme.outlineVariant.withValues(alpha: 0.3)
       ..strokeWidth = 1.0;
-    
+
     final zeroDbPaint = Paint()
-      ..color = Colors.white.withOpacity(0.2)
+      ..color = colorScheme.outline.withValues(alpha: 0.4)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
-    
-    // Draw 0 dB dashed horizontal line
+
     canvas.drawLine(Offset(0, centerY), Offset(width, centerY), zeroDbPaint);
 
     final List<double> xPoints = List.generate(bandsCount, (i) => width * (i + 0.5) / bandsCount);
@@ -1272,18 +1021,20 @@ class EqCurvePainter extends CustomPainter {
       return centerY - (gain / 10.0) * (centerY - 10.0);
     });
 
-    // Draw vertical frequency lines
     for (int i = 0; i < bandsCount; i++) {
       canvas.drawLine(Offset(xPoints[i], 0), Offset(xPoints[i], height), gridPaint);
     }
 
     final path = Path();
     path.moveTo(0, centerY);
-    
+
     path.cubicTo(
-      xPoints[0] * 0.5, centerY,
-      xPoints[0] * 0.5, yPoints[0],
-      xPoints[0], yPoints[0],
+      xPoints[0] * 0.5,
+      centerY,
+      xPoints[0] * 0.5,
+      yPoints[0],
+      xPoints[0],
+      yPoints[0],
     );
 
     for (int i = 0; i < bandsCount - 1; i++) {
@@ -1291,19 +1042,22 @@ class EqCurvePainter extends CustomPainter {
       final y1 = yPoints[i];
       final x2 = xPoints[i + 1];
       final y2 = yPoints[i + 1];
-      
+
       final cx1 = x1 + (x2 - x1) * 0.5;
       final cy1 = y1;
       final cx2 = x1 + (x2 - x1) * 0.5;
       final cy2 = y2;
-      
+
       path.cubicTo(cx1, cy1, cx2, cy2, x2, y2);
     }
 
     path.cubicTo(
-      xPoints[bandsCount - 1] + (width - xPoints[bandsCount - 1]) * 0.5, yPoints[bandsCount - 1],
-      xPoints[bandsCount - 1] + (width - xPoints[bandsCount - 1]) * 0.5, centerY,
-      width, centerY,
+      xPoints[bandsCount - 1] + (width - xPoints[bandsCount - 1]) * 0.5,
+      yPoints[bandsCount - 1],
+      xPoints[bandsCount - 1] + (width - xPoints[bandsCount - 1]) * 0.5,
+      centerY,
+      width,
+      centerY,
     );
 
     final fillPath = Path.from(path);
@@ -1316,30 +1070,30 @@ class EqCurvePainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Colors.purpleAccent.withOpacity(0.25),
-          Colors.blueAccent.withOpacity(0.02),
+          colorScheme.primary.withValues(alpha: 0.35),
+          colorScheme.primary.withValues(alpha: 0.02),
         ],
       ).createShader(Rect.fromLTRB(0, 0, width, height))
       ..style = PaintingStyle.fill;
-    
+
     canvas.drawPath(fillPath, fillPaint);
 
     final linePaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [Colors.purpleAccent, Colors.blueAccent],
+      ..shader = LinearGradient(
+        colors: [colorScheme.primary, colorScheme.secondary],
       ).createShader(Rect.fromLTRB(0, 0, width, height))
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    
+
     canvas.drawPath(path, linePaint);
 
     final handleInnerPaint = Paint()
-      ..color = Colors.white
+      ..color = colorScheme.onPrimary
       ..style = PaintingStyle.fill;
-    
+
     final handleOuterPaint = Paint()
-      ..color = Colors.purpleAccent
+      ..color = colorScheme.primary
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
@@ -1348,21 +1102,21 @@ class EqCurvePainter extends CustomPainter {
     );
 
     for (int i = 0; i < bandsCount; i++) {
-      // Glow circle
       canvas.drawCircle(
         Offset(xPoints[i], yPoints[i]),
         8.0,
-        Paint()..color = Colors.purpleAccent.withOpacity(0.3),
+        Paint()..color = colorScheme.primary.withValues(alpha: 0.3),
       );
-      // Outer border circle
       canvas.drawCircle(Offset(xPoints[i], yPoints[i]), 5.0, handleOuterPaint);
-      // Inner circle
       canvas.drawCircle(Offset(xPoints[i], yPoints[i]), 3.0, handleInnerPaint);
 
-      // Draw Frequency label below circle
       textPainter.text = TextSpan(
         text: formatFreq(frequencies[i]),
-        style: const TextStyle(color: Colors.white70, fontSize: 8, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: colorScheme.onSurfaceVariant,
+          fontSize: 8,
+          fontWeight: FontWeight.w600,
+        ),
       );
       textPainter.layout();
       textPainter.paint(
@@ -1370,11 +1124,14 @@ class EqCurvePainter extends CustomPainter {
         Offset(xPoints[i] - textPainter.width / 2, yPoints[i] + 12),
       );
 
-      // Draw Gain label above circle
       final double gain = gains[i];
       textPainter.text = TextSpan(
         text: '${gain >= 0 ? '+' : ''}${gain.toStringAsFixed(1)}',
-        style: const TextStyle(color: Colors.purpleAccent, fontSize: 8, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: colorScheme.primary,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+        ),
       );
       textPainter.layout();
       textPainter.paint(
@@ -1386,6 +1143,8 @@ class EqCurvePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant EqCurvePainter oldDelegate) {
-    return oldDelegate.gains != gains || oldDelegate.frequencies != frequencies;
+    return oldDelegate.gains != gains ||
+        oldDelegate.frequencies != frequencies ||
+        oldDelegate.colorScheme != colorScheme;
   }
 }

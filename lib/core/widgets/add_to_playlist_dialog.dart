@@ -7,33 +7,50 @@ void showAddToPlaylistDialog(BuildContext context, WidgetRef ref, SongModel song
   showDialog(
     context: context,
     builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      final textTheme = Theme.of(context).textTheme;
+
       return Consumer(
         builder: (context, ref, child) {
           final playlists = ref.watch(localPlaylistsProvider);
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
-            title: const Text('Add to Playlist', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            backgroundColor: scheme.surfaceContainerHigh,
+            title: Text(
+              'Add to Playlist',
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+            ),
             content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.add, color: Colors.purpleAccent),
-                    title: const Text('Create Playlist', style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
+                    leading: Icon(Icons.add, color: scheme.primary),
+                    title: Text(
+                      'Create Playlist',
+                      style: textTheme.titleMedium?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     onTap: () {
                       _showCreatePlaylistInline(context, ref, song);
                     },
                   ),
-                  const Divider(color: Colors.white10),
+                  Divider(color: scheme.outlineVariant),
                   if (playlists.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24.0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24.0),
                       child: Center(
                         child: Text(
                           'No playlists yet.\nTap above to create one!',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     )
@@ -45,7 +62,12 @@ void showAddToPlaylistDialog(BuildContext context, WidgetRef ref, SongModel song
                         itemBuilder: (context, index) {
                           final p = playlists[index];
                           return ListTile(
-                            title: Text(p.name, style: const TextStyle(color: Colors.white)),
+                            title: Text(
+                              p.name,
+                              style: textTheme.titleMedium?.copyWith(
+                                color: scheme.onSurface,
+                              ),
+                            ),
                             onTap: () {
                               ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(p.id, song);
                               Navigator.pop(context);
@@ -71,44 +93,63 @@ void _showCreatePlaylistInline(BuildContext context, WidgetRef ref, SongModel so
   final controller = TextEditingController();
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      title: const Text('New Playlist', style: TextStyle(color: Colors.white)),
-      content: TextField(
-        controller: controller,
-        style: const TextStyle(color: Colors.white),
-        decoration: const InputDecoration(
-          hintText: 'Playlist Name',
-          hintStyle: TextStyle(color: Colors.grey),
-          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
-          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent, width: 2)),
+    builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      final textTheme = Theme.of(context).textTheme;
+
+      return AlertDialog(
+        backgroundColor: scheme.surfaceContainerHigh,
+        title: Text(
+          'New Playlist',
+          style: textTheme.titleLarge?.copyWith(color: scheme.onSurface),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+          decoration: InputDecoration(
+            hintText: 'Playlist Name',
+            hintStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: scheme.primary),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: scheme.primary, width: 2),
+            ),
+          ),
         ),
-        TextButton(
-          onPressed: () async {
-            final name = controller.text.trim();
-            if (name.isNotEmpty) {
-              final newId = await ref.read(localPlaylistsProvider.notifier).createPlaylist(name);
-              await ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(newId, song);
-              if (context.mounted) {
-                // Close the create dialog
-                Navigator.pop(context);
-                // Close the picker dialog
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Created "$name" and added track!')),
-                );
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                final newId = await ref.read(localPlaylistsProvider.notifier).createPlaylist(name);
+                await ref.read(localPlaylistsProvider.notifier).addSongToPlaylist(newId, song);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Created "$name" and added track!')),
+                  );
+                }
               }
-            }
-          },
-          child: const Text('Create', style: TextStyle(color: Colors.purpleAccent)),
-        ),
-      ],
-    ),
+            },
+            child: Text(
+              'Create',
+              style: textTheme.labelLarge?.copyWith(
+                color: scheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }

@@ -14,6 +14,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final homeTabIndexProvider = StateProvider<int>((ref) => 0);
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
+final dockHeightProvider = Provider<double>((ref) {
+  final hasSong = ref.watch(currentSongNotifierProvider.select((s) => s != null));
+  return hasSong ? 128.0 : 64.0;
+});
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -85,10 +90,12 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
     });
 
     final selectedIndex = ref.watch(homeTabIndexProvider);
+    final hasSong = ref.watch(currentSongNotifierProvider.select((s) => s != null));
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scheme.surface,
       body: PopScope(
         canPop: _playerController.value < 0.05,
         onPopInvokedWithResult: (didPop, result) {
@@ -110,34 +117,11 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
               ),
             ),
 
-            // 2. Floating Mini-Player (Positioned above floating tab bar)
-            Positioned(
-              bottom: 12 + bottomInset + 58 + 10,
-              left: 16,
-              right: 16,
-              child: AnimatedBuilder(
-                animation: _playerController,
-                builder: (context, child) {
-                  final val = _playerController.value.clamp(0.0, 1.0);
-                  final opacity = (1.0 - val * 2.5).clamp(0.0, 1.0);
-                  if (opacity <= 0.0) return const SizedBox.shrink();
-
-                  return Opacity(
-                    opacity: opacity,
-                    child: child,
-                  );
-                },
-                child: MusicSlab(
-                  onOpenPlayer: _openPlayer,
-                ),
-              ),
-            ),
-
-            // 3. Floating Glass Tab Bar with sliding spring pill indicator
+            // 2. Liquid Glass Dock: one GlassDock anchored 12 dp above the bottom safe area, 12 dp side margins, radius 28
             Positioned(
               bottom: 12 + bottomInset,
-              left: 16,
-              right: 16,
+              left: 12,
+              right: 12,
               child: AnimatedBuilder(
                 animation: _playerController,
                 builder: (context, child) {
@@ -154,26 +138,47 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
                     ),
                   );
                 },
-                child: GlassSurface(
-                  borderRadius: 26,
-                  blurSigma: 0,
-                  height: 58,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Stack(
+                child: GlassDock(
+                  borderRadius: 28,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Sliding filled pill indicator
-                      _SpringSlidingIndicator(
-                        selectedIndex: selectedIndex,
-                        tabCount: 4,
-                      ),
-                      // Tab items
-                      Row(
-                        children: [
-                          _buildTabItem(0, Icons.home_rounded, 'Home', selectedIndex),
-                          _buildTabItem(1, Icons.search_rounded, 'Search', selectedIndex),
-                          _buildTabItem(2, Icons.library_music_rounded, 'Library', selectedIndex),
-                          _buildTabItem(3, Icons.settings_rounded, 'Settings', selectedIndex),
-                        ],
+                      if (hasSong)
+                        MusicSlab(
+                          onOpenPlayer: _openPlayer,
+                        ),
+                      SizedBox(
+                        height: 64,
+                        child: NavigationBar(
+                          selectedIndex: selectedIndex,
+                          onDestinationSelected: (index) {
+                            HapticFeedback.lightImpact();
+                            ref.read(homeTabIndexProvider.notifier).state = index;
+                          },
+                          backgroundColor: Colors.transparent,
+                          destinations: const [
+                            NavigationDestination(
+                              icon: Icon(Icons.home_outlined),
+                              selectedIcon: Icon(Icons.home_rounded),
+                              label: 'Home',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.search_outlined),
+                              selectedIcon: Icon(Icons.search_rounded),
+                              label: 'Search',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.library_music_outlined),
+                              selectedIcon: Icon(Icons.library_music_rounded),
+                              label: 'Library',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.settings_outlined),
+                              selectedIcon: Icon(Icons.settings_rounded),
+                              label: 'Settings',
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -181,7 +186,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
               ),
             ),
 
-            // 4. Draggable Full Player Sheet (Spring simulation, cached child widget)
+            // 3. Draggable Full Player Sheet (Spring simulation, cached child widget)
             Positioned.fill(
               child: AnimatedBuilder(
                 animation: _playerController,
@@ -219,120 +224,6 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTabItem(int index, IconData icon, String label, int selectedIndex) {
-    final isSelected = selectedIndex == index;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          ref.read(homeTabIndexProvider.notifier).state = index;
-        },
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.45),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.45),
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SpringSlidingIndicator extends StatefulWidget {
-  final int selectedIndex;
-  final int tabCount;
-
-  const _SpringSlidingIndicator({
-    required this.selectedIndex,
-    required this.tabCount,
-  });
-
-  @override
-  State<_SpringSlidingIndicator> createState() => _SpringSlidingIndicatorState();
-}
-
-class _SpringSlidingIndicatorState extends State<_SpringSlidingIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  double _currentPosition = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentPosition = widget.selectedIndex.toDouble();
-    _controller = AnimationController.unbounded(vsync: this, value: _currentPosition)
-      ..addListener(() {
-        setState(() {
-          _currentPosition = _controller.value;
-        });
-      });
-  }
-
-  @override
-  void didUpdateWidget(covariant _SpringSlidingIndicator oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedIndex != widget.selectedIndex) {
-      final sim = GlassPhysics.createSimulation(
-        start: _currentPosition,
-        end: widget.selectedIndex.toDouble(),
-        velocity: 0.0,
-      );
-      _controller.animateWith(sim);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tabWidth = constraints.maxWidth / widget.tabCount;
-        final left = _currentPosition * tabWidth;
-
-        return Stack(
-          children: [
-            Positioned(
-              left: left + 2,
-              top: 2,
-              bottom: 2,
-              width: tabWidth - 4,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.18),
-                    width: 0.8,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

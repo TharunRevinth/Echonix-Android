@@ -97,6 +97,7 @@ class _SkeletonShimmerState extends State<SkeletonShimmer>
     return AnimatedBuilder(
       animation: anim,
       builder: (context, child) {
+        final onSurface = Theme.of(context).colorScheme.onSurface;
         final t = anim.value;
         return ShaderMask(
           blendMode: BlendMode.srcATop,
@@ -105,9 +106,9 @@ class _SkeletonShimmerState extends State<SkeletonShimmer>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withValues(alpha: 0.04),
-                Colors.white.withValues(alpha: 0.18),
-                Colors.white.withValues(alpha: 0.04),
+                onSurface.withValues(alpha: 0.04),
+                onSurface.withValues(alpha: 0.18),
+                onSurface.withValues(alpha: 0.04),
               ],
               stops: [
                 (t - 0.3).clamp(0.0, 1.0),
@@ -141,7 +142,7 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF221A2E),
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
@@ -178,7 +179,7 @@ class HomeFeedSkeleton extends StatelessWidget {
                 itemBuilder: (context, index) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1728),
+                      color: Theme.of(context).colorScheme.surfaceContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     padding: const EdgeInsets.all(6),
@@ -264,7 +265,7 @@ class SearchTrendingSkeleton extends StatelessWidget {
               itemBuilder: (context, index) {
                 return Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1728),
+                    color: Theme.of(context).colorScheme.surfaceContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   padding: const EdgeInsets.all(6),

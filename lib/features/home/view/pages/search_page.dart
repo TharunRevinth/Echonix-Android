@@ -2,16 +2,15 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:client/core/providers/current_song_notifier.dart';
+import 'package:client/core/python_backend.dart';
 import 'package:client/core/utils.dart';
-import 'package:client/core/theme/glass.dart';
+import 'package:client/core/widgets/add_to_playlist_dialog.dart';
 import 'package:client/core/widgets/skeleton_shimmer.dart';
 import 'package:client/features/home/models/song_model.dart';
 import 'package:client/features/home/repositories/home_local_repository.dart';
-import 'package:client/core/python_backend.dart';
+import 'package:client/features/home/view/pages/home_page.dart';
 import 'package:client/features/home/view/pages/playlist_details_page.dart';
 import 'package:client/features/home/viewmodel/downloads_notifier.dart';
-import 'package:client/features/home/view/pages/home_page.dart';
-import 'package:client/core/widgets/add_to_playlist_dialog.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,7 +39,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   List<Map<String, dynamic>> _trendingSongs = [];
   List<Map<String, dynamic>> _trendingAlbums = [];
   bool _loadingTrending = false;
-  bool _trendingFailed = false;
 
   // Speech recognition state
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -52,7 +50,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _focusNode.addListener(() {
-      setState(() {}); // Rebuild to show/hide history on focus change
+      setState(() {});
     });
     _loadTrendingSearches();
   }
@@ -98,7 +96,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   void _loadTrendingSearches() async {
     final localRepo = ref.read(homeLocalRepositoryProvider);
-    // Try loading from cached box first
     final cachedSongs = localRepo.box.get('trending_songs');
     final cachedAlbums = localRepo.box.get('trending_albums');
     if (cachedSongs != null && cachedAlbums != null) {
@@ -108,10 +105,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       });
     }
 
-    // Refresh in background/periodically
     setState(() {
       _loadingTrending = _trendingSongs.isEmpty;
-      _trendingFailed = false;
     });
 
     try {
@@ -123,19 +118,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         setState(() {
           _trendingSongs = List<Map<String, dynamic>>.from(songsList);
           _trendingAlbums = List<Map<String, dynamic>>.from(albumsList);
-          _trendingFailed = false;
         });
         localRepo.box.put('trending_songs', _trendingSongs);
         localRepo.box.put('trending_albums', _trendingAlbums);
-      } else {
-        if (mounted && _trendingSongs.isEmpty) {
-          setState(() => _trendingFailed = true);
-        }
       }
     } catch (_) {
-      if (mounted && _trendingSongs.isEmpty) {
-        setState(() => _trendingFailed = true);
-      }
     } finally {
       if (mounted) {
         setState(() => _loadingTrending = false);
@@ -148,7 +135,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _focusNode.unfocus();
     _searchController.text = query;
 
-    // Add query to local search history
     ref.read(homeLocalRepositoryProvider).addSearchToHistory(query);
 
     setState(() {
@@ -247,60 +233,52 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     final history = ref.watch(homeLocalRepositoryProvider).getSearchHistory();
     final hasActiveQuery = _searchController.text.trim().isNotEmpty;
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: scheme.surface,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
+              scheme.primary.withValues(alpha: 0.10),
+              scheme.surface,
             ],
-            stops: [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.4],
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16.0, left: 16.0, right: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Search',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                
-                // Glass Search Input Field with Voice option
-                GlassSurface(
-                  borderRadius: 14,
-                  blurSigma: 18,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _focusNode,
-                    onSubmitted: _performSearch,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'What do you want to listen to?',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      border: InputBorder.none,
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+          child: CustomScrollView(
+            slivers: [
+              // Screen title & M3 SearchBar pinned at top
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12.0, left: 16.0, right: 16.0, bottom: 12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Search',
+                        style: textTheme.headlineMedium?.copyWith(
+                          color: scheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SearchBar(
+                        controller: _searchController,
+                        focusNode: _focusNode,
+                        hintText: 'What do you want to listen to?',
+                        leading: Icon(Icons.search, color: scheme.onSurfaceVariant),
+                        trailing: [
                           if (hasActiveQuery)
                             IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              icon: Icon(Icons.clear, color: scheme.onSurfaceVariant),
                               onPressed: () {
                                 _searchController.clear();
                                 setState(() {
@@ -311,391 +289,413 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           IconButton(
                             icon: Icon(
                               _isListening ? CupertinoIcons.mic_fill : CupertinoIcons.mic,
-                              color: _isListening ? Colors.redAccent : Colors.grey,
+                              color: _isListening ? scheme.error : scheme.onSurfaceVariant,
                             ),
                             onPressed: _isListening ? _stopListening : _startListening,
                           ),
                         ],
-                      ),
-                      filled: false,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Speech listening overlay
-                if (_isListening)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(32),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.withOpacity(0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(CupertinoIcons.mic_fill, size: 72, color: Colors.purpleAccent),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text('Listening...', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          Text(_searchController.text, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (_speechError.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12.0),
-                    child: Text(_speechError, style: const TextStyle(color: Colors.redAccent)),
-                  ),
-
-                if (!_isListening)
-                  Expanded(
-                    child: _isLoading
-                        ? const SearchTrendingSkeleton()
-                        : _errorMessage.isNotEmpty
-                            ? Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.grey)))
-                            : hasActiveQuery
-                                ? _buildSuggestionsOrResults()
-                                : _buildHistoryAndTrending(history),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSuggestionsOrResults() {
-    if (_searchResults.isNotEmpty) {
-      return ListView.builder(
-        padding: const EdgeInsets.only(bottom: 160),
-        itemCount: _searchResults.length,
-        itemBuilder: (context, index) {
-          final song = _searchResults[index];
-          return ListTile(
-            onTap: () {
-              ref.read(currentSongNotifierProvider.notifier).updatePlaylist(_searchResults, index);
-            },
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: CachedNetworkImage(
-                imageUrl: getHighQualityThumbnail(song.thumbnail_url),
-                width: 48,
-                height: 48,
-                memCacheWidth: 96,
-                fit: BoxFit.cover,
-                errorWidget: (context, url, error) =>
-                    const Icon(Icons.music_note),
-              ),
-            ),
-            title: Text(
-              song.song_name,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
-            ),
-            subtitle: Text(
-              song.artist,
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DownloadButton(song: song, size: 22),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey),
-                  color: const Color(0xFF1E1E1E),
-                  onSelected: (value) {
-                    if (value == 'download') {
-                      _downloadSong(song);
-                    } else if (value == 'playlist') {
-                      _showAddToPlaylistDialog(context, ref, song);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'playlist',
-                      child: Text('Add to Playlist...', style: TextStyle(color: Colors.white)),
-                    ),
-                    const PopupMenuItem(
-                      value: 'download',
-                      child: Text('Download', style: TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    }
-
-    // Show suggestions as we type
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 160),
-      children: [
-        // Text completion queries
-        if (_textSuggestions.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8.0),
-            child: Text('Suggestions', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-          ..._textSuggestions.map((query) => ListTile(
-                leading: const Icon(Icons.search, color: Colors.white30),
-                title: Text(query, style: const TextStyle(color: Colors.white)),
-                onTap: () => _performSearch(query),
-              )),
-        ],
-
-        // Failsafe "search for..."
-        ListTile(
-          leading: const Icon(Icons.search, color: Colors.purpleAccent),
-          title: Text('Search for "${_searchController.text}"', style: const TextStyle(color: Colors.purpleAccent)),
-          onTap: () => _performSearch(_searchController.text),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHistoryAndTrending(List<String> history) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 160),
-      children: [
-        // Recent Searches as Glass Chips
-        if (history.isNotEmpty) ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Recent searches',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              TextButton(
-                onPressed: () {
-                  ref.read(homeLocalRepositoryProvider).clearSearchHistory();
-                  setState(() {});
-                },
-                child: const Text('Clear all', style: TextStyle(color: Colors.grey)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: history.take(8).map((query) {
-              return GestureDetector(
-                onTap: () => _performSearch(query),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.history, color: Colors.white60, size: 14),
-                      const SizedBox(width: 6),
-                      Text(
-                        query,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () {
-                          ref.read(homeLocalRepositoryProvider).removeSearchFromHistory(query);
-                          setState(() {});
-                        },
-                        child: const Icon(Icons.close, color: Colors.white54, size: 14),
+                        onSubmitted: _performSearch,
                       ),
                     ],
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 24),
-        ],
+              ),
 
-        // Trending Searches
-        if (_loadingTrending)
-          const SearchTrendingSkeleton()
-        else if (_trendingFailed && _trendingSongs.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  "Couldn't load trending.",
-                  style: TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-                TextButton(
-                  onPressed: _loadTrendingSearches,
-                  child: const Text('Retry', style: TextStyle(color: Colors.purpleAccent)),
-                ),
-              ],
-            ),
-          )
-        else ...[
-          if (_trendingSongs.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Text(
-                'Trending Songs',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-            const SizedBox(height: 6),
-            GridView.builder(
-              physics: const NeverScrollableScrollPhysics(),
-              shrinkWrap: true,
-              itemCount: _trendingSongs.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 2.6,
-              ),
-              itemBuilder: (context, index) {
-                final song = _trendingSongs[index];
-                return GestureDetector(
-                  onTap: () {
-                    final model = SongModel.fromBackend(Map<String, dynamic>.from(song), hexCode: 'B388FF');
-                    ref.read(currentSongNotifierProvider.notifier).updateSong(model);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white.withOpacity(0.06)),
-                    ),
-                    padding: const EdgeInsets.all(6),
-                    child: Row(
+              // Voice listening overlay
+              if (_isListening)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: CachedNetworkImage(
-                            imageUrl: getHighQualityThumbnail(song['thumbnail'] ?? ''),
-                            width: 44,
-                            height: 44,
-                            memCacheWidth: 88,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) =>
-                                const Icon(Icons.music_note, color: Colors.white54),
+                        Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(CupertinoIcons.mic_fill, size: 64, color: scheme.primary),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Listening...',
+                          style: textTheme.titleMedium?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                song['title'] ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                song['artist'] ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.grey, fontSize: 11),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _searchController.text,
+                          style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-          ],
+                )
+              else if (_speechError.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Text(
+                      _speechError,
+                      style: textTheme.bodySmall?.copyWith(color: scheme.error),
+                    ),
+                  ),
+                ),
 
-          if (_trendingAlbums.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
-              child: Text(
-                'Trending Albums & Playlists',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 160,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _trendingAlbums.length,
-                itemBuilder: (context, index) {
-                  final album = _trendingAlbums[index];
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => PlaylistDetailsPage(
-                            id: album['id'] ?? '',
-                            title: album['title'] ?? '',
-                            thumbnailUrl: album['thumbnail'] ?? '',
-                            isAlbum: true,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 110,
-                      margin: const EdgeInsets.only(right: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: CachedNetworkImage(
-                              imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
-                              width: 110,
-                              height: 110,
-                              memCacheWidth: 220,
-                              fit: BoxFit.cover,
-                              errorWidget: (context, url, error) =>
-                                  const Icon(Icons.album, size: 110, color: Colors.grey),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            album['title'] ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            album['artist'] ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.grey, fontSize: 10),
-                          ),
-                        ],
+              if (!_isListening) ...[
+                if (_isLoading)
+                  const SliverToBoxAdapter(child: SearchTrendingSkeleton())
+                else if (_errorMessage.isNotEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Text(
+                        _errorMessage,
+                        style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
-      ],
-    );
-  }
+                  )
+                else if (_searchResults.isNotEmpty) ...[
+                  // Results as ListTiles with 52 dp artwork, DownloadButton and overflow menu
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final song = _searchResults[index];
+                        return ListTile(
+                          onTap: () {
+                            ref.read(currentSongNotifierProvider.notifier).updatePlaylist(_searchResults, index);
+                          },
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: CachedNetworkImage(
+                              imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+                              width: 52,
+                              height: 52,
+                              memCacheWidth: 104,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) => Container(
+                                width: 52,
+                                height: 52,
+                                color: scheme.surfaceContainerHigh,
+                                child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            song.song_name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.titleMedium?.copyWith(
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          subtitle: Text(
+                            song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              DownloadButton(song: song, size: 22, color: scheme.onSurfaceVariant),
+                              PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant),
+                                color: scheme.surfaceContainerHigh,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                onSelected: (value) {
+                                  if (value == 'download') {
+                                    _downloadSong(song);
+                                  } else if (value == 'playlist') {
+                                    showAddToPlaylistDialog(context, ref, song);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  PopupMenuItem(
+                                    value: 'playlist',
+                                    child: Text('Add to Playlist...', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'download',
+                                    child: Text('Download', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      childCount: _searchResults.length,
+                    ),
+                  ),
+                ] else if (hasActiveQuery) ...[
+                  // Suggestions as ListTiles
+                  if (_textSuggestions.isNotEmpty)
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final query = _textSuggestions[index];
+                          return ListTile(
+                            leading: Icon(Icons.search, color: scheme.onSurfaceVariant),
+                            title: Text(query, style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+                            onTap: () => _performSearch(query),
+                          );
+                        },
+                        childCount: _textSuggestions.length,
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: ListTile(
+                      leading: Icon(Icons.search, color: scheme.primary),
+                      title: Text(
+                        'Search for "${_searchController.text}"',
+                        style: textTheme.titleMedium?.copyWith(color: scheme.primary),
+                      ),
+                      onTap: () => _performSearch(_searchController.text),
+                    ),
+                  ),
+                ] else ...[
+                  // Recent searches as InputChips with delete
+                  if (history.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Recent searches',
+                              style: textTheme.titleMedium?.copyWith(
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                ref.read(homeLocalRepositoryProvider).clearSearchHistory();
+                                setState(() {});
+                              },
+                              child: Text('Clear all', style: textTheme.labelLarge?.copyWith(color: scheme.primary)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: history.take(8).map((query) {
+                            return InputChip(
+                              avatar: Icon(Icons.history, size: 16, color: scheme.onSurfaceVariant),
+                              label: Text(query),
+                              onPressed: () => _performSearch(query),
+                              onDeleted: () {
+                                ref.read(homeLocalRepositoryProvider).removeSearchFromHistory(query);
+                                setState(() {});
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  ],
 
-  void _showAddToPlaylistDialog(BuildContext context, WidgetRef ref, SongModel song) {
-    showAddToPlaylistDialog(context, ref, song);
+                  // Trending Searches: 2-column grid of cards (no shrinkWrap)
+                  if (_loadingTrending)
+                    const SliverToBoxAdapter(child: SearchTrendingSkeleton())
+                  else if (_trendingSongs.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Text(
+                          'Trending Songs',
+                          style: textTheme.titleMedium?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      sliver: SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 2.8,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final song = _trendingSongs[index];
+                            return Card.filled(
+                              color: scheme.surfaceContainerHigh,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap: () {
+                                  final model = SongModel.fromBackend(Map<String, dynamic>.from(song), hexCode: 'B388FF');
+                                  ref.read(currentSongNotifierProvider.notifier).updateSong(model);
+                                },
+                                child: Row(
+                                  children: [
+                                    CachedNetworkImage(
+                                      imageUrl: getHighQualityThumbnail(song['thumbnail'] ?? ''),
+                                      width: 48,
+                                      height: 48,
+                                      memCacheWidth: 96,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (context, url, error) => Container(
+                                        width: 48,
+                                        height: 48,
+                                        color: scheme.surfaceContainerHighest,
+                                        child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            song['title'] ?? '',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: textTheme.titleSmall?.copyWith(
+                                              color: scheme.onSurface,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Text(
+                                            song['artist'] ?? '',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: textTheme.bodySmall?.copyWith(
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          childCount: _trendingSongs.length,
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                  ],
+
+                  // Trending Albums & Playlists
+                  if (_trendingAlbums.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Text(
+                          'Trending Albums & Playlists',
+                          style: textTheme.titleMedium?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 170,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.only(left: 16.0),
+                          itemCount: _trendingAlbums.length,
+                          itemBuilder: (context, index) {
+                            final album = _trendingAlbums[index];
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => PlaylistDetailsPage(
+                                      id: album['id'] ?? '',
+                                      title: album['title'] ?? '',
+                                      thumbnailUrl: album['thumbnail'] ?? '',
+                                      isAlbum: true,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                width: 116,
+                                margin: const EdgeInsets.only(right: 14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: CachedNetworkImage(
+                                        imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
+                                        width: 116,
+                                        height: 116,
+                                        memCacheWidth: 232,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (context, url, error) => Container(
+                                          width: 116,
+                                          height: 116,
+                                          color: scheme.surfaceContainerHigh,
+                                          child: Icon(Icons.album, size: 40, color: scheme.onSurfaceVariant),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      album['title'] ?? '',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.titleSmall?.copyWith(
+                                        color: scheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      album['artist'] ?? '',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+
+              // Responsive bottom spacing derived from dockHeightProvider + 16
+              SliverToBoxAdapter(
+                child: SizedBox(height: dockHeight + 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

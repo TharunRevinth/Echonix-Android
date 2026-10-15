@@ -28,24 +28,31 @@ class PlaylistDetailsPage extends ConsumerWidget {
         ? PythonBackend.getAlbumDetails(id)
         : PythonBackend.getPlaylistDetails(id);
 
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: scheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: scheme.surface,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
+              scheme.primary.withValues(alpha: 0.10),
+              scheme.surface,
             ],
-            stops: [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.4],
           ),
         ),
         child: SafeArea(
@@ -57,13 +64,15 @@ class PlaylistDetailsPage extends ConsumerWidget {
                 return const Loader();
               }
               if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
+                return Center(
+                  child: Text('Error: ${snapshot.error}', style: textTheme.bodyMedium?.copyWith(color: scheme.error)),
+                );
               }
 
               final res = snapshot.data;
               if (res == null || res['success'] != true) {
                 return Center(
-                  child: Text(res?['error'] ?? 'Failed to load details'),
+                  child: Text(res?['error'] ?? 'Failed to load details', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                 );
               }
 
@@ -90,23 +99,27 @@ class PlaylistDetailsPage extends ConsumerWidget {
                       child: Column(
                         children: [
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(16),
                             child: CachedNetworkImage(
                               imageUrl: thumbnailUrl,
-                              width: 200,
-                              height: 200,
-                              memCacheWidth: 400,
+                              width: 180,
+                              height: 180,
+                              memCacheWidth: 360,
                               fit: BoxFit.cover,
-                              errorWidget: (context, url, error) =>
-                                  const Icon(Icons.music_note, size: 100),
+                              errorWidget: (context, url, error) => Container(
+                                width: 180,
+                                height: 180,
+                                color: scheme.surfaceContainerHigh,
+                                child: Icon(Icons.music_note, color: scheme.onSurfaceVariant, size: 80),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
                           Text(
                             title,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 24,
+                            style: textTheme.headlineMedium?.copyWith(
+                              color: scheme.onSurface,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -115,9 +128,8 @@ class PlaylistDetailsPage extends ConsumerWidget {
                             Text(
                               description,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -125,7 +137,7 @@ class PlaylistDetailsPage extends ConsumerWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              ElevatedButton.icon(
+                              FilledButton.icon(
                                 onPressed: songs.isEmpty
                                     ? null
                                     : () {
@@ -133,18 +145,8 @@ class PlaylistDetailsPage extends ConsumerWidget {
                                             .read(currentSongNotifierProvider.notifier)
                                             .updatePlaylist(songs, 0);
                                       },
-                                icon: const Icon(Icons.play_arrow, color: Colors.black),
-                                label: const Text(
-                                  'Play All',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('Play All'),
                               ),
                               const SizedBox(width: 12),
                               OutlinedButton.icon(
@@ -162,18 +164,8 @@ class PlaylistDetailsPage extends ConsumerWidget {
                                           ),
                                         );
                                       },
-                                icon: const Icon(Icons.download, color: Colors.white),
-                                label: const Text(
-                                  'Download All',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Colors.white),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                    vertical: 12,
-                                  ),
-                                ),
+                                icon: const Icon(Icons.download),
+                                label: const Text('Download All'),
                               ),
                             ],
                           ),
@@ -186,29 +178,36 @@ class PlaylistDetailsPage extends ConsumerWidget {
                       (context, index) {
                         final song = songs[index];
                         return ListTile(
-                          leading: Text(
-                            '${index + 1}',
-                            style: const TextStyle(color: Colors.grey, fontSize: 16),
+                          leading: SizedBox(
+                            width: 28,
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: Text(
+                                '${index + 1}',
+                                style: textTheme.titleSmall?.copyWith(color: scheme.onSurfaceVariant),
+                              ),
+                            ),
                           ),
                           title: Text(
                             song.song_name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
                           ),
                           subtitle: Text(
                             song.artist,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.grey),
+                            style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              DownloadButton(song: song, size: 22),
+                              DownloadButton(song: song, size: 22, color: scheme.onSurfaceVariant),
                               PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, color: Colors.grey),
-                                color: const Color(0xFF1E1E1E),
+                                icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant),
+                                color: scheme.surfaceContainerHigh,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 onSelected: (value) {
                                   if (value == 'download') {
                                     ref.read(downloadsProvider.notifier).startDownloading(song);
@@ -218,17 +217,17 @@ class PlaylistDetailsPage extends ConsumerWidget {
                                       ),
                                     );
                                   } else if (value == 'playlist') {
-                                    _showAddToPlaylistDialog(context, ref, song);
+                                    showAddToPlaylistDialog(context, ref, song);
                                   }
                                 },
                                 itemBuilder: (context) => [
-                                  const PopupMenuItem(
+                                  PopupMenuItem(
                                     value: 'playlist',
-                                    child: Text('Add to Playlist...', style: TextStyle(color: Colors.white)),
+                                    child: Text('Add to Playlist...', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
                                   ),
-                                  const PopupMenuItem(
+                                  PopupMenuItem(
                                     value: 'download',
-                                    child: Text('Download', style: TextStyle(color: Colors.white)),
+                                    child: Text('Download', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
                                   ),
                                 ],
                               ),
@@ -244,6 +243,9 @@ class PlaylistDetailsPage extends ConsumerWidget {
                       childCount: songs.length,
                     ),
                   ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 80),
+                  ),
                 ],
               );
             },
@@ -251,8 +253,5 @@ class PlaylistDetailsPage extends ConsumerWidget {
         ),
       ),
     );
-  }
-  void _showAddToPlaylistDialog(BuildContext context, WidgetRef ref, SongModel song) {
-    showAddToPlaylistDialog(context, ref, song);
   }
 }

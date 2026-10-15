@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:client/core/theme/app_pallete.dart';
+import 'package:client/core/theme/echonix_theme.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/widgets/custom_field.dart';
 import 'package:client/core/widgets/loader.dart';
@@ -20,7 +20,7 @@ class UploadSongPage extends ConsumerStatefulWidget {
 class _UploadSongPageState extends ConsumerState<UploadSongPage> {
   final songNameController = TextEditingController();
   final artistController = TextEditingController();
-  Color selectedColor = Pallete.cardColor;
+  Color selectedColor = EchonixTheme.darkColorScheme.surfaceContainer;
   File? selectedImage;
   File? selectedAudio;
   final formKey = GlobalKey<FormState>();
@@ -102,7 +102,7 @@ class _UploadSongPageState extends ConsumerState<UploadSongPage> {
                                 ),
                               )
                             : DottedBorder(
-                                color: Pallete.borderColor,
+                                color: Theme.of(context).colorScheme.outlineVariant,
                                 radius: const Radius.circular(10),
                                 borderType: BorderType.RRect,
                                 dashPattern: const [10, 4],

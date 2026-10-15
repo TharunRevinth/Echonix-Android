@@ -44,22 +44,68 @@ class LibraryPage extends ConsumerStatefulWidget {
 }
 
 class _LibraryPageState extends ConsumerState<LibraryPage> {
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? action,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: textTheme.titleMedium?.copyWith(
+                color: scheme.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 20),
+              action,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: Container(
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: scheme.surface,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
+              scheme.primary.withValues(alpha: 0.10),
+              scheme.surface,
             ],
-            stops: [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.4],
           ),
         ),
         child: SafeArea(
@@ -68,21 +114,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
                   child: Text(
                     'Your Library',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: textTheme.headlineMedium?.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 TabBar(
                   isScrollable: true,
                   tabAlignment: TabAlignment.start,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.white60,
-                  indicatorColor: Theme.of(context).colorScheme.primary,
-                  indicatorWeight: 3,
-                  dividerColor: Colors.white10,
+                  labelColor: scheme.onSecondaryContainer,
+                  unselectedLabelColor: scheme.onSurfaceVariant,
+                  indicatorColor: scheme.primary,
+                  dividerColor: scheme.outlineVariant,
                   tabs: const [
                     Tab(text: 'Songs'),
                     Tab(text: 'Downloads'),
@@ -117,20 +165,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   void _deleteSong(SongModel song) async {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('Delete Download', style: TextStyle(color: Colors.white)),
-        content: Text('Are you sure you want to delete "${song.song_name}"?', style: const TextStyle(color: Colors.white70)),
+        backgroundColor: scheme.surfaceContainerHigh,
+        title: Text('Delete Download', style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+        content: Text('Are you sure you want to delete "${song.song_name}"?', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            child: Text('Cancel', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: Text('Delete', style: textTheme.labelLarge?.copyWith(color: scheme.error)),
           ),
         ],
       ),
@@ -150,32 +201,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         if (await altJson.exists()) await altJson.delete();
         PythonBackend.deleteDownloadedSong(song.id);
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted "${song.song_name}"')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted "${song.song_name}"')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting song: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting song: $e')),
+          );
+        }
       }
     }
   }
 
   void _deletePlaylist(String playlistName, List<SongModel> songs) async {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('Delete Playlist', style: TextStyle(color: Colors.white)),
-        content: Text('Are you sure you want to delete the playlist "$playlistName" and all its downloaded tracks?', style: const TextStyle(color: Colors.white70)),
+        backgroundColor: scheme.surfaceContainerHigh,
+        title: Text('Delete Playlist', style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+        content: Text('Are you sure you want to delete the playlist "$playlistName" and all its downloaded tracks?', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            child: Text('Cancel', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete All', style: TextStyle(color: Colors.redAccent)),
+            child: Text('Delete All', style: textTheme.labelLarge?.copyWith(color: scheme.error)),
           ),
         ],
       ),
@@ -197,23 +255,31 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           PythonBackend.deleteDownloadedSong(song.id);
         }
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted playlist "$playlistName"')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted playlist "$playlistName"')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting playlist: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting playlist: $e')),
+          );
+        }
       }
     }
   }
 
   Widget _buildFavorites() {
     final likedSongIds = ref.watch(likedSongIdsProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return ref.watch(favoriteSongsProvider).when(
           data: (data) {
             return ListView.builder(
-              padding: const EdgeInsets.only(bottom: 160),
+              padding: EdgeInsets.only(bottom: dockHeight + 16),
               itemCount: data.length + 1,
               itemBuilder: (context, index) {
                 if (index == data.length) {
@@ -226,18 +292,18 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       );
                     },
                     leading: Container(
-                      width: 50,
-                      height: 50,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        color: scheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: scheme.outlineVariant),
                       ),
-                      child: const Icon(CupertinoIcons.plus, color: Colors.white),
+                      child: Icon(CupertinoIcons.plus, color: scheme.primary),
                     ),
-                    title: const Text(
+                    title: Text(
                       'Upload New Song',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
                     ),
                   );
                 }
@@ -249,29 +315,37 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     ref.read(currentSongNotifierProvider.notifier).updatePlaylist(data, index);
                   },
                   leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                     child: CachedNetworkImage(
                       imageUrl: getHighQualityThumbnail(song.thumbnail_url),
-                      width: 50,
-                      height: 50,
-                      memCacheWidth: 100,
+                      width: 48,
+                      height: 48,
+                      memCacheWidth: 96,
                       fit: BoxFit.cover,
-                      errorWidget: (context, url, error) =>
-                          const Icon(Icons.music_note, size: 50),
+                      errorWidget: (context, url, error) => Container(
+                        width: 48,
+                        height: 48,
+                        color: scheme.surfaceContainerHigh,
+                        child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                      ),
                     ),
                   ),
                   title: Text(
                     song.song_name,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
                   ),
                   subtitle: Text(
                     song.artist,
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                   trailing: IconButton(
                     icon: Icon(
                       isLiked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                      color: isLiked ? Colors.redAccent : Colors.white,
+                      color: isLiked ? scheme.tertiary : scheme.onSurfaceVariant,
                     ),
                     onPressed: () {
                       ref.read(likedSongIdsProvider.notifier).toggle(song);
@@ -281,34 +355,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               },
             );
           },
-          error: (error, st) => Center(child: Text(error.toString(), style: const TextStyle(color: Colors.white))),
+          error: (error, st) => Center(
+            child: Text(error.toString(), style: textTheme.bodyMedium?.copyWith(color: scheme.error)),
+          ),
           loading: () => const Loader(),
         );
   }
 
   Widget _buildPlaylists() {
     final playlists = ref.watch(localPlaylistsProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 160),
+      padding: EdgeInsets.only(bottom: dockHeight + 16),
       itemCount: playlists.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) {
           return ListTile(
             onTap: () => _showCreatePlaylistDialog(context),
             leading: Container(
-              width: 50,
-              height: 50,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                color: scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.outlineVariant),
               ),
-              child: const Icon(CupertinoIcons.plus, color: Colors.white),
+              child: Icon(CupertinoIcons.plus, color: scheme.primary),
             ),
-            title: const Text(
+            title: Text(
               'Create Playlist',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+              style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
             ),
           );
         }
@@ -327,21 +406,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             );
           },
           leading: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: PlaylistCoverWidget(playlist: playlist, size: 50),
+            borderRadius: BorderRadius.circular(12),
+            child: PlaylistCoverWidget(playlist: playlist, size: 48),
           ),
           title: Text(
             playlist.name,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
           ),
           subtitle: Text(
             '${playlist.songs.length} tracks • ${playlist.description.isNotEmpty ? playlist.description : 'Custom playlist'}${playlist.isCollaborative ? ' • Shared' : ''}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: Colors.grey),
+            style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
           trailing: IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            icon: Icon(Icons.delete_outline, color: scheme.error),
             onPressed: () {
               ref.read(localPlaylistsProvider.notifier).deletePlaylist(playlist.id);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -356,32 +437,35 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   void _showCreatePlaylistDialog(BuildContext context) {
     final controller = TextEditingController();
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('New Playlist', style: TextStyle(color: Colors.white)),
+        backgroundColor: scheme.surfaceContainerHigh,
+        title: Text('New Playlist', style: textTheme.titleLarge?.copyWith(color: scheme.onSurface)),
         content: TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
+          style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+          decoration: InputDecoration(
             hintText: 'Playlist Name',
-            hintStyle: TextStyle(color: Colors.grey),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent, width: 2)),
+            hintStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: scheme.primary)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: scheme.primary, width: 2)),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            child: Text('Cancel', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () {
               ref.read(localPlaylistsProvider.notifier).createPlaylist(controller.text);
               Navigator.pop(context);
             },
-            child: const Text('Create', style: TextStyle(color: Colors.purpleAccent)),
+            child: Text('Create', style: textTheme.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -390,6 +474,10 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildDownloads() {
     final dlState = ref.watch(downloadsProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return FutureBuilder<Map<String, dynamic>>(
       key: ValueKey(dlState.hashCode),
       future: PythonBackend.getDownloadedSongs(),
@@ -398,34 +486,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           return const Loader();
         }
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)));
+          return Center(
+            child: Text('Error: ${snapshot.error}', style: textTheme.bodyMedium?.copyWith(color: scheme.error)),
+          );
         }
         final res = snapshot.data;
         if (res == null || res['success'] != true) {
           return Center(
-            child: Text(res?['error'] ?? 'Failed to load downloaded songs', style: const TextStyle(color: Colors.grey)),
+            child: Text(res?['error'] ?? 'Failed to load downloaded songs', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
           );
         }
 
         final List songsList = res['songs'] ?? [];
         if (songsList.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.download_done_rounded, size: 64, color: Colors.white.withOpacity(0.3)),
-                const SizedBox(height: 16),
-                const Text(
-                  'Nothing downloaded yet',
-                  style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Songs and playlists you download will appear here',
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-              ],
-            ),
+          return _buildEmptyState(
+            icon: Icons.download_done_rounded,
+            title: 'Nothing downloaded yet',
+            subtitle: 'Songs and playlists you download will appear here',
           );
         }
 
@@ -457,7 +534,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         final totalItemsCount = playlistKeys.length + individualSongsRaw.length + 1;
 
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 160),
+          padding: EdgeInsets.only(bottom: dockHeight + 16),
           itemCount: totalItemsCount,
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -468,11 +545,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                   children: [
                     Text(
                       '${songsList.length} downloaded tracks',
-                      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                      style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     Text(
                       'Storage used: $storageText',
-                      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w600),
+                      style: textTheme.labelLarge?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -487,38 +567,38 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
               return ListTile(
                 leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   child: firstSongThumb.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: firstSongThumb,
-                          width: 50,
-                          height: 50,
-                          memCacheWidth: 100,
+                          width: 48,
+                          height: 48,
+                          memCacheWidth: 96,
                           fit: BoxFit.cover,
                           errorWidget: (context, url, error) => Container(
-                            width: 50,
-                            height: 50,
-                            color: Colors.white.withOpacity(0.05),
-                            child: const Icon(Icons.playlist_play, color: Colors.white70),
+                            width: 48,
+                            height: 48,
+                            color: scheme.surfaceContainerHigh,
+                            child: Icon(Icons.playlist_play, color: scheme.onSurfaceVariant),
                           ),
                         )
                       : Container(
-                          width: 50,
-                          height: 50,
-                          color: Colors.white.withOpacity(0.05),
-                          child: const Icon(Icons.playlist_play, color: Colors.white70),
+                          width: 48,
+                          height: 48,
+                          color: scheme.surfaceContainerHigh,
+                          child: Icon(Icons.playlist_play, color: scheme.onSurfaceVariant),
                         ),
                 ),
-                title: Text(playlistName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-                subtitle: Text('${playlistSongs.length} tracks (Downloaded Playlist)', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                title: Text(playlistName, style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+                subtitle: Text('${playlistSongs.length} tracks (Downloaded Playlist)', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      icon: Icon(Icons.delete_outline, color: scheme.error),
                       onPressed: () => _deletePlaylist(playlistName, playlistSongs),
                     ),
-                    const Icon(Icons.chevron_right, color: Colors.grey),
+                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
                   ],
                 ),
                 onTap: () {
@@ -539,14 +619,19 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
               return ListTile(
                 leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   child: CachedNetworkImage(
                     imageUrl: getHighQualityThumbnail(song.thumbnail_url),
-                    width: 50,
-                    height: 50,
-                    memCacheWidth: 100,
+                    width: 48,
+                    height: 48,
+                    memCacheWidth: 96,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 50),
+                    errorWidget: (context, url, error) => Container(
+                      width: 48,
+                      height: 48,
+                      color: scheme.surfaceContainerHigh,
+                      child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                    ),
                   ),
                 ),
                 title: Row(
@@ -554,26 +639,31 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                     Expanded(
                       child: Text(
                         song.song_name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
                       ),
                     ),
                     if (hasLyrics)
-                      const Tooltip(
+                      Tooltip(
                         message: 'Offline lyrics available',
                         child: Padding(
-                          padding: EdgeInsets.only(left: 6.0),
-                          child: Icon(Icons.lyrics, color: Colors.greenAccent, size: 16),
+                          padding: const EdgeInsets.only(left: 6.0),
+                          child: Icon(Icons.lyrics, color: scheme.primary, size: 16),
                         ),
                       ),
                   ],
                 ),
                 subtitle: Text(
                   songSizeMb.isNotEmpty ? '${song.artist} • $songSizeMb' : song.artist,
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 trailing: PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white70),
-                  color: const Color(0xFF1E1E1E),
+                  icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant),
+                  color: scheme.surfaceContainerHigh,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   onSelected: (value) async {
                     if (value == 'delete') {
                       _deleteSong(song);
@@ -581,21 +671,25 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Retrying lyrics download...')));
                       final res = await PythonBackend.redownloadLyrics(song.id, song.song_name, song.artist);
                       if (res['success'] == true) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lyrics downloaded successfully!')));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lyrics downloaded successfully!')));
+                        }
                         setState(() {});
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: ${res['error'] ?? 'Lyrics not found'}')));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: ${res['error'] ?? 'Lyrics not found'}')));
+                        }
                       }
                     }
                   },
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'redownload_lyrics',
-                      child: Text(hasLyrics ? 'Refresh Lyrics' : 'Download Lyrics', style: const TextStyle(color: Colors.white)),
+                      child: Text(hasLyrics ? 'Refresh Lyrics' : 'Download Lyrics', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'delete',
-                      child: Text('Delete Download', style: TextStyle(color: Colors.redAccent)),
+                      child: Text('Delete Download', style: textTheme.bodyMedium?.copyWith(color: scheme.error)),
                     ),
                   ],
                 ),
@@ -615,28 +709,41 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildRecentlyPlayed() {
     final songs = ref.watch(recentlyPlayedProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (songs.isEmpty) {
-      return const Center(child: Text('No recently played songs', style: TextStyle(color: Colors.grey)));
+      return _buildEmptyState(
+        icon: Icons.history_rounded,
+        title: 'No recently played songs',
+        subtitle: 'Songs you play will appear here',
+      );
     }
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 160),
+      padding: EdgeInsets.only(bottom: dockHeight + 16),
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
         return ListTile(
           leading: ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(12),
             child: CachedNetworkImage(
               imageUrl: getHighQualityThumbnail(song.thumbnail_url),
               width: 44,
               height: 44,
               memCacheWidth: 88,
               fit: BoxFit.cover,
-              errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 44),
+              errorWidget: (context, url, error) => Container(
+                width: 44,
+                height: 44,
+                color: scheme.surfaceContainerHigh,
+                child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+              ),
             ),
           ),
-          title: Text(song.song_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: Text(song.artist, style: const TextStyle(color: Colors.grey)),
+          title: Text(song.song_name, maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+          subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
           onTap: () => ref.read(currentSongNotifierProvider.notifier).updateSong(song),
         );
       },
@@ -645,8 +752,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildPlaybackHistory() {
     final history = ref.watch(listeningHistoryProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (history.isEmpty) {
-      return const Center(child: Text('No listening history', style: TextStyle(color: Colors.grey)));
+      return _buildEmptyState(
+        icon: Icons.access_time_rounded,
+        title: 'No listening history',
+        subtitle: 'Your listening activity will be recorded here',
+      );
     }
     return Column(
       children: [
@@ -655,20 +770,20 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${history.length} plays recorded', style: const TextStyle(color: Colors.white54)),
+              Text('${history.length} plays recorded', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
               TextButton(
                 onPressed: () {
                   ref.read(homeLocalRepositoryProvider).clearListeningHistory();
                   setState(() {});
                 },
-                child: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+                child: Text('Clear', style: textTheme.labelLarge?.copyWith(color: scheme.error)),
               ),
             ],
           ),
         ),
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 160),
+            padding: EdgeInsets.only(bottom: dockHeight + 16),
             itemCount: history.length,
             itemBuilder: (context, index) {
               final item = history[index];
@@ -678,18 +793,23 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
               return ListTile(
                 leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(12),
                   child: CachedNetworkImage(
                     imageUrl: getHighQualityThumbnail(song.thumbnail_url),
                     width: 44,
                     height: 44,
                     memCacheWidth: 88,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => const Icon(Icons.music_note, size: 44),
+                    errorWidget: (context, url, error) => Container(
+                      width: 44,
+                      height: 44,
+                      color: scheme.surfaceContainerHigh,
+                      child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                    ),
                   ),
                 ),
-                title: Text(song.song_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: Text('${song.artist} • $timeStr', style: const TextStyle(color: Colors.grey)),
+                title: Text(song.song_name, maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+                subtitle: Text('${song.artist} • $timeStr', maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                 onTap: () => ref.read(currentSongNotifierProvider.notifier).updateSong(song),
               );
             },
@@ -700,18 +820,24 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   }
 
   Widget _buildMostPlayed() {
-    // Collect all unique songs from recently played and other segments to cross-reference counts
     final localRepo = ref.watch(homeLocalRepositoryProvider);
     final allKnown = localRepo.getRecentlyPlayed();
     final mostPlayed = localRepo.getMostPlayedSongs(allKnown);
     final playCounts = localRepo.getPlayCounts();
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     if (mostPlayed.isEmpty) {
-      return const Center(child: Text('Complete playback to track counts', style: TextStyle(color: Colors.grey)));
+      return _buildEmptyState(
+        icon: Icons.bar_chart_rounded,
+        title: 'Complete playback to track counts',
+        subtitle: 'Play tracks repeatedly to see your favorites ranked here',
+      );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 160),
+      padding: EdgeInsets.only(bottom: dockHeight + 16),
       itemCount: mostPlayed.length,
       itemBuilder: (context, index) {
         final song = mostPlayed[index];
@@ -720,10 +846,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           leading: Container(
             width: 32,
             alignment: Alignment.center,
-            child: Text('#${index + 1}', style: const TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+            child: Text(
+              '#${index + 1}',
+              style: textTheme.titleMedium?.copyWith(
+                color: scheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
-          title: Text(song.song_name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: Text('${song.artist} • $count plays', style: const TextStyle(color: Colors.grey)),
+          title: Text(song.song_name, maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+          subtitle: Text('${song.artist} • $count plays', maxLines: 1, overflow: TextOverflow.ellipsis, style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
           onTap: () => ref.read(currentSongNotifierProvider.notifier).updateSong(song),
         );
       },
@@ -732,11 +864,19 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildSavedAlbums() {
     final albums = ref.watch(savedAlbumsProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (albums.isEmpty) {
-      return const Center(child: Text('No saved albums', style: TextStyle(color: Colors.grey)));
+      return _buildEmptyState(
+        icon: Icons.album_rounded,
+        title: 'No saved albums',
+        subtitle: 'Save albums to access them quickly here',
+      );
     }
     return GridView.builder(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 160),
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: dockHeight + 16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.8,
@@ -764,13 +904,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             children: [
               Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(16),
                   child: CachedNetworkImage(
                     imageUrl: getHighQualityThumbnail(album['thumbnail'] ?? ''),
                     fit: BoxFit.cover,
                     width: double.infinity,
                     memCacheWidth: 240,
-                    errorWidget: (context, url, error) => Container(color: Colors.white10),
+                    errorWidget: (context, url, error) => Container(
+                      color: scheme.surfaceContainerHigh,
+                      child: Icon(Icons.album_rounded, color: scheme.onSurfaceVariant),
+                    ),
                   ),
                 ),
               ),
@@ -779,13 +922,13 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 album['title'] ?? '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: textTheme.titleSmall?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.bold),
               ),
               Text(
                 album['artist'] ?? '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
@@ -796,35 +939,46 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   Widget _buildSavedArtists() {
     final artists = ref.watch(savedArtistsProvider);
+    final dockHeight = ref.watch(dockHeightProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (artists.isEmpty) {
-      return const Center(child: Text('No followed artists', style: TextStyle(color: Colors.grey)));
+      return _buildEmptyState(
+        icon: Icons.person_rounded,
+        title: 'No followed artists',
+        subtitle: 'Follow artists to see their releases here',
+      );
     }
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 160),
+      padding: EdgeInsets.only(bottom: dockHeight + 16),
       itemCount: artists.length,
       itemBuilder: (context, index) {
         final artist = artists[index];
         return ListTile(
           onTap: () {
-            // Push search query to search and navigate
             ref.read(searchQueryProvider.notifier).state = artist['name'] ?? '';
-            // Switch navigation tab to Search tab (typically index 1 or triggered by router)
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Searching for "${artist['name']}"...')));
+            ref.read(homeTabIndexProvider.notifier).state = 1;
           },
           leading: ClipRRect(
-            borderRadius: BorderRadius.circular(25),
+            borderRadius: BorderRadius.circular(24),
             child: CachedNetworkImage(
               imageUrl: getHighQualityThumbnail(artist['thumbnail'] ?? ''),
-              width: 50,
-              height: 50,
-              memCacheWidth: 100,
+              width: 48,
+              height: 48,
+              memCacheWidth: 96,
               fit: BoxFit.cover,
-              errorWidget: (context, url, error) => Container(color: Colors.white10),
+              errorWidget: (context, url, error) => Container(
+                width: 48,
+                height: 48,
+                color: scheme.surfaceContainerHigh,
+                child: Icon(Icons.person, color: scheme.onSurfaceVariant),
+              ),
             ),
           ),
-          title: Text(artist['name'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(artist['name'] ?? '', style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
           trailing: IconButton(
-            icon: const Icon(Icons.check_circle, color: Colors.purpleAccent),
+            icon: Icon(Icons.check_circle, color: scheme.primary),
             onPressed: () {
               ref.read(homeLocalRepositoryProvider).removeArtist(artist['id'] ?? '');
               setState(() {});
@@ -851,7 +1005,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 }
 
 // -----------------------------------------------------------------------------
-// Custom Playlist Details Page Widget (Draggable reordering, custom covers, descriptions, and collaboration)
+// Custom Playlist Details Page Widget
 // -----------------------------------------------------------------------------
 class CustomPlaylistDetailsPage extends ConsumerStatefulWidget {
   final String? playlistId;
@@ -879,38 +1033,39 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
       (p) => (widget.playlistId != null && p.id == widget.playlistId) || p.name == widget.playlistName,
       orElse: () => CustomPlaylist(id: widget.playlistId ?? '', name: widget.playlistName, songs: []),
     );
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: scheme.surface,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
+              scheme.primary.withValues(alpha: 0.10),
+              scheme.surface,
             ],
-            stops: [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.4],
           ),
         ),
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Customized Header
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon: Icon(Icons.arrow_back, color: scheme.onSurface),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.white),
+                      icon: Icon(Icons.edit, color: scheme.onSurface),
                       onPressed: () => _showEditPlaylistDialog(context, playlist),
                     ),
                   ],
@@ -923,8 +1078,8 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: PlaylistCoverWidget(playlist: playlist, size: 120),
+                      borderRadius: BorderRadius.circular(16),
+                      child: PlaylistCoverWidget(playlist: playlist, size: 110),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -935,7 +1090,10 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                             playlist.name,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: textTheme.headlineSmall?.copyWith(
+                              color: scheme.onSurface,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           if (playlist.description.isNotEmpty) ...[
                             const SizedBox(height: 4),
@@ -943,13 +1101,13 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                               playlist.description,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14, color: Colors.grey),
+                              style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                           ],
                           const SizedBox(height: 6),
                           Text(
                             '${playlist.songs.length} songs ${playlist.isCollaborative ? '• Shared' : ''}',
-                            style: const TextStyle(fontSize: 12, color: Colors.white54, fontWeight: FontWeight.w600),
+                            style: textTheme.labelSmall?.copyWith(color: scheme.primary),
                           ),
                         ],
                       ),
@@ -963,64 +1121,26 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
               if (playlist.songs.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, 0);
-                              },
-                              icon: const Icon(Icons.play_arrow, color: Colors.black),
-                              label: const Text('Play All', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                minimumSize: const Size.fromHeight(44),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                final shuffled = List<SongModel>.from(playlist.songs)..shuffle();
-                                ref.read(currentSongNotifierProvider.notifier).updatePlaylist(shuffled, 0);
-                              },
-                              icon: const Icon(Icons.shuffle, color: Colors.white),
-                              label: const Text('Shuffle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.white24),
-                                minimumSize: const Size.fromHeight(44),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                              ),
-                            ),
-                          ),
-                        ],
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, 0);
+                          },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Play All'),
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Downloading ${playlist.songs.length} tracks in background...')),
-                          );
-                          for (final song in playlist.songs) {
-                            await PythonBackend.downloadSong(
-                              song.id,
-                              song.song_name,
-                              song.artist,
-                              song.thumbnail_url,
-                              playlist.name,
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.download, color: Colors.white),
-                        label: const Text('Download All', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white24),
-                          minimumSize: const Size.fromHeight(44),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final shuffled = List<SongModel>.from(playlist.songs)..shuffle();
+                            ref.read(currentSongNotifierProvider.notifier).updatePlaylist(shuffled, 0);
+                          },
+                          icon: const Icon(Icons.shuffle),
+                          label: const Text('Shuffle'),
                         ),
                       ),
                     ],
@@ -1029,83 +1149,86 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
 
               Expanded(
                 child: playlist.songs.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No songs in this playlist yet.\nSearch for songs to add them!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    : ReorderableListView.builder(
-                        itemCount: playlist.songs.length,
-                        onReorder: (oldIndex, newIndex) {
-                          ref.read(localPlaylistsProvider.notifier).reorderSongInPlaylist(playlist.id, oldIndex, newIndex);
-                        },
-                        itemBuilder: (context, index) {
-                          final song = playlist.songs[index];
-                          return ListTile(
-                            key: ValueKey(song.id + index.toString()),
-                            leading: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: CachedNetworkImage(
-                                imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+                  ? Center(
+                      child: Text(
+                        'No songs in this playlist yet.\nSearch for songs to add them!',
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    )
+                  : ReorderableListView.builder(
+                      itemCount: playlist.songs.length,
+                      onReorder: (oldIndex, newIndex) {
+                        ref.read(localPlaylistsProvider.notifier).reorderSongInPlaylist(playlist.id, oldIndex, newIndex);
+                      },
+                      itemBuilder: (context, index) {
+                        final song = playlist.songs[index];
+                        return ListTile(
+                          key: ValueKey(song.id + index.toString()),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: CachedNetworkImage(
+                              imageUrl: getHighQualityThumbnail(song.thumbnail_url),
+                              width: 44,
+                              height: 44,
+                              memCacheWidth: 88,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) => Container(
                                 width: 44,
                                 height: 44,
-                                memCacheWidth: 88,
-                                fit: BoxFit.cover,
-                                errorWidget: (context, url, error) =>
-                                    const Icon(Icons.music_note, size: 44),
+                                color: scheme.surfaceContainerHigh,
+                                child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
                               ),
                             ),
-                            title: Text(
-                              song.song_name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
-                            ),
-                            subtitle: Text(
-                              song.artist,
-                              style: const TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.download, color: Colors.white70, size: 20),
-                                  onPressed: () async {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Downloading "${song.song_name}" in background...')),
-                                    );
-                                    final res = await PythonBackend.downloadSong(
-                                      song.id,
-                                      song.song_name,
-                                      song.artist,
-                                      song.thumbnail_url,
-                                      playlist.name,
-                                    );
-                                    if (res['success'] != true) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Failed to download: ${res['error']}')),
-                                      );
-                                    }
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
-                                  onPressed: () {
-                                    ref.read(localPlaylistsProvider.notifier).removeSongFromPlaylist(playlist.id, song.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Removed "${song.song_name}"')),
-                                    );
-                                  },
-                                ),
-                                const Icon(Icons.drag_handle, color: Colors.white30),
-                              ],
-                            ),
-                            onTap: () {
-                              ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, index);
-                            },
-                          );
-                        },
-                      ),
+                          ),
+                          title: Text(
+                            song.song_name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
+                          ),
+                          subtitle: Text(
+                            song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.download, color: scheme.onSurfaceVariant, size: 20),
+                                onPressed: () async {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Downloading "${song.song_name}" in background...')),
+                                  );
+                                  await PythonBackend.downloadSong(
+                                    song.id,
+                                    song.song_name,
+                                    song.artist,
+                                    song.thumbnail_url,
+                                    playlist.name,
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.remove_circle_outline, color: scheme.error, size: 20),
+                                onPressed: () {
+                                  ref.read(localPlaylistsProvider.notifier).removeSongFromPlaylist(playlist.id, song.id);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Removed "${song.song_name}"')),
+                                  );
+                                },
+                              ),
+                              Icon(Icons.drag_handle, color: scheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                            ],
+                          ),
+                          onTap: () {
+                            ref.read(currentSongNotifierProvider.notifier).updatePlaylist(playlist.songs, index);
+                          },
+                        );
+                      },
+                    ),
               ),
             ],
           ),
@@ -1119,12 +1242,14 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
     final descController = TextEditingController(text: playlist.description);
     String? coverPath = playlist.customCoverPath;
     bool isCollab = playlist.isCollaborative;
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: scheme.surfaceContainerHigh,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -1139,25 +1264,25 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Edit Playlist Details', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Edit Playlist Details', style: textTheme.titleLarge?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   TextField(
                     controller: nameController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Name', labelStyle: TextStyle(color: Colors.grey)),
+                    style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+                    decoration: InputDecoration(labelText: 'Name', labelStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: descController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.grey)),
+                    style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+                    decoration: InputDecoration(labelText: 'Description', labelStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                   ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      const Text('Custom Cover Art:', style: TextStyle(color: Colors.white)),
+                      Text('Custom Cover Art:', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurface)),
                       const SizedBox(width: 12),
-                      ElevatedButton(
+                      FilledButton.tonal(
                         onPressed: () async {
                           final result = await FilePicker.platform.pickFiles(type: FileType.image);
                           if (result != null && result.files.single.path != null) {
@@ -1170,14 +1295,14 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                       ),
                       if (coverPath != null) ...[
                         const SizedBox(width: 10),
-                        const Icon(Icons.check_circle, color: Colors.green),
+                        Icon(Icons.check_circle, color: scheme.primary),
                       ],
                     ],
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
-                    title: const Text('Collaborative Playlist', style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('Allow other users to edit', style: TextStyle(color: Colors.grey)),
+                    title: Text('Collaborative Playlist', style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+                    subtitle: Text('Allow other users to edit', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
                     value: isCollab,
                     onChanged: (val) {
                       setModalState(() {
@@ -1191,9 +1316,9 @@ class _CustomPlaylistDetailsPageState extends ConsumerState<CustomPlaylistDetail
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                        child: Text('Cancel', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
                       ),
-                      ElevatedButton(
+                      FilledButton(
                         onPressed: () async {
                           final newName = nameController.text.trim();
                           if (newName.isNotEmpty && newName != playlist.name) {
@@ -1250,20 +1375,23 @@ class _DownloadedPlaylistPageState extends ConsumerState<DownloadedPlaylistPage>
   }
 
   void _deleteSong(SongModel song) async {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('Delete Download', style: TextStyle(color: Colors.white)),
-        content: Text('Are you sure you want to delete "${song.song_name}"?', style: const TextStyle(color: Colors.white70)),
+        backgroundColor: scheme.surfaceContainerHigh,
+        title: Text('Delete Download', style: textTheme.titleMedium?.copyWith(color: scheme.onSurface)),
+        content: Text('Are you sure you want to delete "${song.song_name}"?', style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+            child: Text('Cancel', style: textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: Text('Delete', style: textTheme.labelLarge?.copyWith(color: scheme.error)),
           ),
         ],
       ),
@@ -1278,38 +1406,49 @@ class _DownloadedPlaylistPageState extends ConsumerState<DownloadedPlaylistPage>
         setState(() {
           _songs.remove(song);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted "${song.song_name}"')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted "${song.song_name}"')),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting song: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting song: $e')),
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(widget.title, style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: scheme.onSurface)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: scheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
+          color: scheme.surface,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF180828),
-              Color(0xFF090310),
-              Colors.black,
+              scheme.primary.withValues(alpha: 0.10),
+              scheme.surface,
             ],
-            stops: [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.4],
           ),
         ),
         child: SafeArea(
@@ -1319,14 +1458,13 @@ class _DownloadedPlaylistPageState extends ConsumerState<DownloadedPlaylistPage>
               if (_songs.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton.icon(
+                  child: FilledButton.icon(
                     onPressed: () {
                       ref.read(currentSongNotifierProvider.notifier).updatePlaylist(_songs, 0);
                     },
-                    icon: const Icon(Icons.play_arrow, color: Colors.black),
-                    label: const Text('Play All', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Play All'),
+                    style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                     ),
                   ),
@@ -1338,27 +1476,35 @@ class _DownloadedPlaylistPageState extends ConsumerState<DownloadedPlaylistPage>
                     final song = _songs[index];
                     return ListTile(
                       leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(12),
                         child: CachedNetworkImage(
                           imageUrl: song.thumbnail_url,
                           width: 48,
                           height: 48,
                           memCacheWidth: 96,
                           fit: BoxFit.cover,
-                          errorWidget: (context, url, error) =>
-                              const Icon(Icons.music_note, size: 48),
+                          errorWidget: (context, url, error) => Container(
+                            width: 48,
+                            height: 48,
+                            color: scheme.surfaceContainerHigh,
+                            child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+                          ),
                         ),
                       ),
                       title: Text(
                         song.song_name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium?.copyWith(color: scheme.onSurface),
                       ),
                       subtitle: Text(
                         song.artist,
-                        style: const TextStyle(color: Colors.grey, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                       trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        icon: Icon(Icons.delete_outline, color: scheme.error),
                         onPressed: () => _deleteSong(song),
                       ),
                       onTap: () {
@@ -1387,6 +1533,8 @@ class PlaylistCoverWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     if (playlist.customCoverPath != null && playlist.customCoverPath!.isNotEmpty) {
       final file = File(playlist.customCoverPath!);
       if (file.existsSync()) {
@@ -1394,7 +1542,6 @@ class PlaylistCoverWidget extends StatelessWidget {
       }
     }
 
-    // Grid collage generation from the first 4 songs
     if (playlist.songs.length >= 4) {
       return SizedBox(
         width: size,
@@ -1408,7 +1555,7 @@ class PlaylistCoverWidget extends StatelessWidget {
               imageUrl: song.thumbnail_url,
               memCacheWidth: size.toInt(),
               fit: BoxFit.cover,
-              errorWidget: (context, url, error) => Container(color: Colors.white10),
+              errorWidget: (context, url, error) => Container(color: scheme.surfaceContainerHigh),
             );
           }).toList(),
         ),
@@ -1422,16 +1569,18 @@ class PlaylistCoverWidget extends StatelessWidget {
         height: size,
         memCacheWidth: (size * 2).toInt(),
         fit: BoxFit.cover,
-        errorWidget: (context, url, error) =>
-            Container(color: Colors.white10, child: const Icon(Icons.music_note, color: Colors.white70)),
+        errorWidget: (context, url, error) => Container(
+          color: scheme.surfaceContainerHigh,
+          child: Icon(Icons.music_note, color: scheme.onSurfaceVariant),
+        ),
       );
     }
 
     return Container(
       width: size,
       height: size,
-      color: Colors.white.withOpacity(0.05),
-      child: const Icon(Icons.playlist_play, color: Colors.white70, size: 28),
+      color: scheme.surfaceContainerHigh,
+      child: Icon(Icons.playlist_play, color: scheme.onSurfaceVariant, size: 28),
     );
   }
 }

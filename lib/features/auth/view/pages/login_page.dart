@@ -1,4 +1,3 @@
-import 'package:client/core/theme/app_pallete.dart';
 import 'package:client/core/utils.dart';
 import 'package:client/core/widgets/loader.dart';
 import 'package:client/features/auth/view/pages/signup_page.dart';
@@ -113,11 +112,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         text: TextSpan(
                           text: 'Don\'t have an account? ',
                           style: Theme.of(context).textTheme.titleMedium,
-                          children: const [
+                          children: [
                             TextSpan(
                               text: 'Sign Up',
                               style: TextStyle(
-                                color: Pallete.gradient2,
+                                color: Theme.of(context).colorScheme.primary,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
